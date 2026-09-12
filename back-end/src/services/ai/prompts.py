@@ -74,3 +74,41 @@ def build_user_prompt(
         parts.append("Hãy tự biên soạn các câu hỏi chuẩn mực theo chủ đề trên.")
 
     return "\n".join(parts)
+
+
+def build_clean_text_prompt(raw_text: str, target_language: str = "vi") -> tuple[str, str]:
+    """Tạo prompt để AI làm sạch văn bản OCR thô (sửa dấu tiếng Việt, nối câu liên trang)."""
+    system_prompt = (
+        "Bạn là trợ lý biên tập tài liệu giáo dục. "
+        "Nhiệm vụ: nhận văn bản trích xuất từ OCR của nhiều trang sách, "
+        "sửa lỗi chính tả dấu tiếng Việt do OCR nhận nhầm, "
+        "nối liền câu bị đứt đoạn giữa các trang. "
+        "Tuyệt đối giữ nguyên nội dung, số liệu, tên riêng và cấu trúc câu hỏi. "
+        "Không thêm bớt ý kiến cá nhân. "
+        'Trả về JSON: {"cleanedText": "..."}'
+    )
+    user_prompt = (
+        f"Ngôn ngữ mục tiêu: {target_language}\n\n"
+        f'Văn bản OCR thô:\n"""\n{raw_text}\n"""'
+    )
+    return system_prompt, user_prompt
+
+
+GEMINI_OCR_SYSTEM_PROMPT = """Bạn là hệ thống OCR chuyên dụng, có nhiệm vụ trích xuất TOÀN BỘ văn bản từ hình ảnh tài liệu giáo dục và đề thi tiếng Việt một cách trung thực và chính xác nhất.
+
+QUY TẮC BẮT BUỘC:
+1. Đảm bảo 100% dấu tiếng Việt chính xác (ă, â, ê, ô, ơ, ư, đ và các dấu thanh huyền, sắc, hỏi, ngã, nặng). Tuyệt đối không làm mất dấu hay sai dấu.
+2. Giữ nguyên cấu trúc thứ tự văn bản từ trên xuống dưới, trái sang phải: tiêu đề, phần, đánh số thứ tự câu hỏi (ví dụ: Câu 1, Câu 2...), các đáp án lựa chọn (A, B, C, D...).
+3. Nếu tài liệu có bảng biểu, hãy chuyển thành bảng Markdown chuẩn.
+4. Nếu có công thức toán/lý/hóa, hãy giữ nguyên định dạng ký hiệu hoặc dùng công thức LaTeX inline $...$ hoặc Unicode dễ đọc.
+5. KHÔNG thêm lời chào, KHÔNG giải thích, KHÔNG thêm nhận xét hay bất kỳ từ ngữ nào ngoài nội dung trong ảnh.
+6. Nếu một phần chữ bị mờ hoặc rách không thể đọc được, ghi chú [không rõ].
+"""
+
+
+def build_ocr_prompt(custom_instruction: str | None = None) -> str:
+    """Tạo prompt cho Gemini Vision OCR trích xuất văn bản tiếng Việt."""
+    if custom_instruction:
+        return f"{GEMINI_OCR_SYSTEM_PROMPT}\n\nYêu cầu bổ sung: {custom_instruction}"
+    return GEMINI_OCR_SYSTEM_PROMPT
+

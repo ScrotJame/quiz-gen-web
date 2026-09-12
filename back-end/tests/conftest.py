@@ -7,6 +7,11 @@ from sqlalchemy import text
 os.environ["APP_ENV"] = "test"
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_quiz.db"
 os.environ["USE_IN_MEMORY_REPOS"] = "false"
+os.environ["MISTRAL_API_KEY"] = ""  # Rule 6: Mock/fallback trong test tự động, không gọi API thật
+os.environ["GEMINI_API_KEY"] = ""  # Rule 6: Mock/fallback trong test tự động, không gọi API thật
+
+from src.config import get_settings
+get_settings.cache_clear()
 
 from src.db.base import Base
 from src.db.session import dispose_engine, get_engine

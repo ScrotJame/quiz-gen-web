@@ -29,10 +29,11 @@ def test_prompts_temperature_distinction():
     assert "sửa lỗi chính tả từ bản quét OCR" in p_creative
 
 
-def test_ocr_extraction():
+@pytest.mark.asyncio
+async def test_ocr_extraction():
     img_bytes = create_test_image_bytes("Hello OCR Test")
-    extracted = extract_text_from_image(img_bytes)
-    # RapidOCR should run and return a string (may be empty if font is too small or text)
+    extracted = await extract_text_from_image(img_bytes)
+    # OCR should run and return a string
     assert isinstance(extracted, str)
 
 

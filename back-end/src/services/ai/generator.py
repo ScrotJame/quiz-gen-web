@@ -15,7 +15,7 @@ from src.models.schemas import (
     QuizCreate,
 )
 from src.repositories.base import QuizRepository
-from src.services.ai.mistral_client import call_mistral_chat, has_mistral_key
+from src.services.ai.gemini_client import call_gemini_chat, has_gemini_key
 from src.services.ai.ocr import extract_text_from_image
 from src.services.ai.prompts import build_system_prompt, build_user_prompt
 
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class QuizGeneratorService:
-    """Service điều phối OCR và sinh câu hỏi trắc nghiệm qua Mistral AI."""
+    """Service điều phối OCR và sinh câu hỏi trắc nghiệm qua Gemini AI."""
 
     def __init__(self, quiz_repo: QuizRepository) -> None:
         self.quiz_repo = quiz_repo
@@ -37,15 +37,15 @@ class QuizGeneratorService:
         difficulty: Difficulty = Difficulty.MEDIUM,
         temperature: float = 0.3,
         save_immediately: bool = False,
-        author_name: str = "Mistral AI",
+        author_name: str = "Gemini AI",
     ) -> GeneratedQuizResponse:
         """Sinh đề trắc nghiệm từ văn bản hoặc chủ đề."""
         if not topic and not content:
             topic = "Kiến thức Tổng quát"
 
-        # Nếu chưa có MISTRAL_API_KEY -> Sử dụng Mock Generator để dev không bị gián đoạn
-        if not has_mistral_key():
-            logger.info("Chưa có MISTRAL_API_KEY, kích hoạt Mock Generator.")
+        # Nếu chưa có GEMINI_API_KEY -> Sử dụng Mock Generator để dev không bị gián đoạn
+        if not has_gemini_key():
+            logger.info("Chưa có GEMINI_API_KEY, kích hoạt Mock Generator.")
             quiz_resp = self._generate_mock_quiz(
                 topic=topic or "Đề trắc nghiệm từ tài liệu",
                 content=content,
@@ -62,7 +62,7 @@ class QuizGeneratorService:
                 difficulty=difficulty,
             )
 
-            raw_response = await call_mistral_chat(
+            raw_response = await call_gemini_chat(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 temperature=temperature,
@@ -93,10 +93,10 @@ class QuizGeneratorService:
         difficulty: Difficulty = Difficulty.MEDIUM,
         temperature: float = 0.0,
         save_immediately: bool = False,
-        author_name: str = "OCR + Mistral AI",
+        author_name: str = "Gemini OCR + AI",
     ) -> GeneratedQuizResponse:
         """Nhận ảnh, trích xuất text qua OCR và đưa vào LLM theo nhiệt độ temperature."""
-        ocr_text = extract_text_from_image(image_bytes)
+        ocr_text = await extract_text_from_image(image_bytes)
         if not ocr_text.strip():
             # Nếu không tìm thấy text trong ảnh, vẫn tạo mock fallback
             ocr_text = "Ảnh đề thi trắc nghiệm mẫu (Không phát hiện chữ rõ ràng trong ảnh)."
@@ -164,7 +164,7 @@ class QuizGeneratorService:
 
         return GeneratedQuizResponse(
             title=data.get("title", "Đề thi AI tạo"),
-            description=data.get("description", "Được tạo tự động bởi Mistral AI."),
+            description=data.get("description", "Được tạo tự động bởi Gemini AI."),
             category=data.get("category", "Chung"),
             difficulty=diff,
             questions=questions_in,
