@@ -12,12 +12,22 @@ from src.models.schemas import (
     QuestionType,
     SubmitAttemptRequest,
 )
+from src.core.exceptions import AppError, EntityNotFoundError
 from src.repositories.base import AttemptRepository, QuizRepository
 
 
-class AttemptServiceError(Exception):
+class AttemptServiceError(AppError):
     """Lỗi nghiệp vụ làm bài thi."""
-    pass
+
+    error_code = "ATTEMPT_SERVICE_ERROR"
+    status_code = 400
+
+
+class AttemptNotFoundError(AttemptServiceError, EntityNotFoundError):
+    """Không tìm thấy lượt làm bài hoặc đề thi liên quan."""
+
+    error_code = "NOT_FOUND"
+    status_code = 404
 
 
 class AttemptService:
@@ -39,7 +49,7 @@ class AttemptService:
     ) -> AttemptResult:
         quiz = await self.quiz_repo.get_quiz(quiz_id)
         if not quiz:
-            raise AttemptServiceError(f"Không tìm thấy đề thi với mã: {quiz_id}")
+            raise AttemptNotFoundError(f"Không tìm thấy đề thi với mã: {quiz_id}")
         if not quiz.is_published:
             raise AttemptServiceError("Đề thi này chưa được phát hành.")
 
@@ -49,7 +59,7 @@ class AttemptService:
     async def get_attempt(self, attempt_id: uuid.UUID) -> AttemptResult:
         attempt = await self.attempt_repo.get_attempt(attempt_id)
         if not attempt:
-            raise AttemptServiceError(f"Không tìm thấy lượt làm bài: {attempt_id}")
+            raise AttemptNotFoundError(f"Không tìm thấy lượt làm bài: {attempt_id}")
         return attempt
 
     async def submit_attempt(
@@ -120,5 +130,5 @@ class AttemptService:
     ) -> list[LeaderboardEntry]:
         quiz = await self.quiz_repo.get_quiz(quiz_id)
         if not quiz:
-            raise AttemptServiceError(f"Không tìm thấy đề thi với mã: {quiz_id}")
+            raise AttemptNotFoundError(f"Không tìm thấy đề thi với mã: {quiz_id}")
         return await self.attempt_repo.get_leaderboard(quiz_id, limit=limit)

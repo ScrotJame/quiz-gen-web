@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 
+from src.core.exceptions import AppError, EntityNotFoundError
 from src.models.schemas import (
     DashboardStats,
     QuestionCreate,
@@ -15,9 +16,18 @@ from src.models.schemas import (
 from src.repositories.base import QuizRepository
 
 
-class QuizServiceError(Exception):
+class QuizServiceError(AppError):
     """Lỗi nghiệp vụ Quiz."""
-    pass
+
+    error_code = "QUIZ_SERVICE_ERROR"
+    status_code = 400
+
+
+class QuizNotFoundError(QuizServiceError, EntityNotFoundError):
+    """Không tìm thấy đề thi hoặc câu hỏi."""
+
+    error_code = "NOT_FOUND"
+    status_code = 404
 
 
 class QuizService:
@@ -49,7 +59,7 @@ class QuizService:
     async def get_quiz(self, quiz_id: uuid.UUID) -> QuizDetail:
         quiz = await self.repo.get_quiz(quiz_id)
         if not quiz:
-            raise QuizServiceError(f"Không tìm thấy đề thi với mã: {quiz_id}")
+            raise QuizNotFoundError(f"Không tìm thấy đề thi với mã: {quiz_id}")
         return quiz
 
     async def create_quiz(self, data: QuizCreate) -> QuizDetail:
@@ -67,13 +77,13 @@ class QuizService:
     ) -> QuizDetail:
         updated = await self.repo.update_quiz(quiz_id, data)
         if not updated:
-            raise QuizServiceError(f"Không tìm thấy đề thi với mã: {quiz_id}")
+            raise QuizNotFoundError(f"Không tìm thấy đề thi với mã: {quiz_id}")
         return updated
 
     async def delete_quiz(self, quiz_id: uuid.UUID) -> bool:
         deleted = await self.repo.delete_quiz(quiz_id)
         if not deleted:
-            raise QuizServiceError(f"Không tìm thấy đề thi với mã: {quiz_id}")
+            raise QuizNotFoundError(f"Không tìm thấy đề thi với mã: {quiz_id}")
         return True
 
     async def add_question(
@@ -90,7 +100,7 @@ class QuizService:
     async def delete_question(self, question_id: uuid.UUID) -> bool:
         deleted = await self.repo.delete_question(question_id)
         if not deleted:
-            raise QuizServiceError(f"Không tìm thấy câu hỏi với mã: {question_id}")
+            raise QuizNotFoundError(f"Không tìm thấy câu hỏi với mã: {question_id}")
         return True
 
     def _validate_question(self, q: QuestionCreate) -> None:

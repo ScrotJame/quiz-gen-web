@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from src.api.deps import get_attempt_service, get_quiz_service
 from src.models.schemas import (
@@ -17,8 +17,8 @@ from src.models.schemas import (
     QuizSummary,
     QuizUpdate,
 )
-from src.services.attempt_service import AttemptService, AttemptServiceError
-from src.services.quiz_service import QuizService, QuizServiceError
+from src.services.attempt_service import AttemptService
+from src.services.quiz_service import QuizService
 
 router = APIRouter(tags=["Quizzes"])
 
@@ -65,10 +65,7 @@ async def create_quiz(
     data: QuizCreate,
     service: Annotated[QuizService, Depends(get_quiz_service)],
 ) -> QuizDetail:
-    try:
-        return await service.create_quiz(data)
-    except QuizServiceError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return await service.create_quiz(data)
 
 
 @router.get("/quizzes/{quiz_id}", response_model=QuizDetail)
@@ -76,10 +73,7 @@ async def get_quiz(
     quiz_id: uuid.UUID,
     service: Annotated[QuizService, Depends(get_quiz_service)],
 ) -> QuizDetail:
-    try:
-        return await service.get_quiz(quiz_id)
-    except QuizServiceError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    return await service.get_quiz(quiz_id)
 
 
 @router.put("/quizzes/{quiz_id}", response_model=QuizDetail)
@@ -88,10 +82,7 @@ async def update_quiz(
     data: QuizUpdate,
     service: Annotated[QuizService, Depends(get_quiz_service)],
 ) -> QuizDetail:
-    try:
-        return await service.update_quiz(quiz_id, data)
-    except QuizServiceError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    return await service.update_quiz(quiz_id, data)
 
 
 @router.delete(
@@ -103,11 +94,8 @@ async def delete_quiz(
     quiz_id: uuid.UUID,
     service: Annotated[QuizService, Depends(get_quiz_service)],
 ) -> Response:
-    try:
-        await service.delete_quiz(quiz_id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    except QuizServiceError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    await service.delete_quiz(quiz_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(
@@ -120,10 +108,7 @@ async def add_question_to_quiz(
     data: QuestionCreate,
     service: Annotated[QuizService, Depends(get_quiz_service)],
 ) -> QuestionSchema:
-    try:
-        return await service.add_question(quiz_id, data)
-    except QuizServiceError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return await service.add_question(quiz_id, data)
 
 
 @router.delete(
@@ -135,11 +120,8 @@ async def delete_question(
     question_id: uuid.UUID,
     service: Annotated[QuizService, Depends(get_quiz_service)],
 ) -> Response:
-    try:
-        await service.delete_question(question_id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-    except QuizServiceError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    await service.delete_question(question_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/quizzes/{quiz_id}/leaderboard", response_model=list[LeaderboardEntry])
@@ -148,7 +130,4 @@ async def get_quiz_leaderboard(
     attempt_service: Annotated[AttemptService, Depends(get_attempt_service)],
     limit: int = Query(default=20, ge=1, le=100),
 ) -> list[LeaderboardEntry]:
-    try:
-        return await attempt_service.get_leaderboard(quiz_id, limit=limit)
-    except AttemptServiceError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    return await attempt_service.get_leaderboard(quiz_id, limit=limit)

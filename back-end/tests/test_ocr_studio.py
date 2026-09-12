@@ -81,13 +81,53 @@ class TestOcrPage:
         assert data["lineCount"] == 1
         assert data["averageConfidence"] == 0.95
 
+    def test_valid_image_with_custom_det_params(self) -> None:
+        from src.models.schemas import OcrPageResponse
+        png = _make_png_bytes()
+        with patch("src.api.ai.extract_text_with_metadata", new_callable=AsyncMock) as mock_ocr:
+            mock_ocr.return_value = OcrPageResponse(
+                text="Cau 1: Thu do Viet Nam la gi?",
+                line_count=1,
+                average_confidence=0.92,
+                provider="local_vietocr",
+            )
+            response = client.post(
+                "/api/v1/ai/ocr-page",
+                files={"file": ("page.png", png, "image/png")},
+                data={
+                    "engine": "local_vietocr",
+                    "unclip_ratio": "1.45",
+                    "box_thresh": "0.38",
+                    "limit_side_len": "1280",
+                    "enable_clahe": "true",
+                    "split_tall_boxes": "false",
+                },
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["provider"] == "local_vietocr"
+        # Verify det_params was forwarded accurately
+        mock_ocr.assert_called_once()
+        _, kwargs = mock_ocr.call_args
+        assert kwargs["preferred_engine"] == "local_vietocr"
+        assert kwargs["det_params"] == {
+            "unclip_ratio": 1.45,
+            "box_thresh": 0.38,
+            "limit_side_len": 1280,
+            "enable_clahe": True,
+            "split_tall_boxes": False,
+        }
+
 
 # POST /api/v1/ai/clean-text
 
 
 class TestCleanText:
     def test_no_api_key_returns_raw_text_fallback(self) -> None:
-        with patch("src.api.ai.has_gemini_key", return_value=False):
+        with (
+            patch("src.services.ai.generator.has_gemini_key", return_value=False),
+            patch("src.services.ai.generator.has_mistral_key", return_value=False),
+        ):
             response = client.post(
                 "/api/v1/ai/clean-text",
                 json={"rawText": "Van ban loi chinh ta", "targetLanguage": "vi"},
@@ -96,8 +136,14 @@ class TestCleanText:
         assert response.json()["cleanedText"] == "Van ban loi chinh ta"
 
     def test_gemini_error_returns_502(self) -> None:
-        with patch("src.api.ai.has_gemini_key", return_value=True), patch(
-            "src.api.ai.call_gemini_chat", new_callable=AsyncMock, side_effect=Exception("timeout")
+        with (
+            patch("src.services.ai.generator.has_mistral_key", return_value=False),
+            patch("src.services.ai.generator.has_gemini_key", return_value=True),
+            patch(
+                "src.services.ai.generator.call_gemini_chat",
+                new_callable=AsyncMock,
+                side_effect=Exception("timeout"),
+            ),
         ):
             response = client.post(
                 "/api/v1/ai/clean-text",
@@ -106,10 +152,14 @@ class TestCleanText:
         assert response.status_code == 502
 
     def test_gemini_bad_json_returns_raw_text_fallback(self) -> None:
-        with patch("src.api.ai.has_gemini_key", return_value=True), patch(
-            "src.api.ai.call_gemini_chat",
-            new_callable=AsyncMock,
-            return_value="khong phai JSON hop le",
+        with (
+            patch("src.services.ai.generator.has_mistral_key", return_value=False),
+            patch("src.services.ai.generator.has_gemini_key", return_value=True),
+            patch(
+                "src.services.ai.generator.call_gemini_chat",
+                new_callable=AsyncMock,
+                return_value="khong phai JSON hop le",
+            ),
         ):
             response = client.post(
                 "/api/v1/ai/clean-text",
@@ -120,10 +170,14 @@ class TestCleanText:
 
     def test_gemini_success_returns_cleaned_text(self) -> None:
         ai_response = json.dumps({"cleanedText": "Van ban da duoc lam sach."})
-        with patch("src.api.ai.has_gemini_key", return_value=True), patch(
-            "src.api.ai.call_gemini_chat",
-            new_callable=AsyncMock,
-            return_value=ai_response,
+        with (
+            patch("src.services.ai.generator.has_mistral_key", return_value=False),
+            patch("src.services.ai.generator.has_gemini_key", return_value=True),
+            patch(
+                "src.services.ai.generator.call_gemini_chat",
+                new_callable=AsyncMock,
+                return_value=ai_response,
+            ),
         ):
             response = client.post(
                 "/api/v1/ai/clean-text",
@@ -133,7 +187,10 @@ class TestCleanText:
         assert response.json()["cleanedText"] == "Van ban da duoc lam sach."
 
     def test_default_target_language_is_vi(self) -> None:
-        with patch("src.api.ai.has_gemini_key", return_value=False):
+        with (
+            patch("src.services.ai.generator.has_gemini_key", return_value=False),
+            patch("src.services.ai.generator.has_mistral_key", return_value=False),
+        ):
             response = client.post(
                 "/api/v1/ai/clean-text",
                 json={"rawText": "test"},

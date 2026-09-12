@@ -5,6 +5,7 @@ import logging
 import re
 import uuid
 
+from src.core.exceptions import ExternalServiceError
 from src.models.schemas import (
     AIGenerateRequest,
     Difficulty,
@@ -16,14 +17,19 @@ from src.models.schemas import (
 )
 from src.repositories.base import QuizRepository
 from src.services.ai.gemini_client import call_gemini_chat, has_gemini_key
+from src.services.ai.mistral_client import call_mistral_chat, has_mistral_key
 from src.services.ai.ocr import extract_text_from_image
-from src.services.ai.prompts import build_system_prompt, build_user_prompt
+from src.services.ai.prompts import (
+    build_clean_text_prompt,
+    build_system_prompt,
+    build_user_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class QuizGeneratorService:
-    """Service điều phối OCR và sinh câu hỏi trắc nghiệm qua Gemini AI."""
+    """Service điều phối OCR và sinh câu hỏi trắc nghiệm qua Mistral AI / Gemini AI."""
 
     def __init__(self, quiz_repo: QuizRepository) -> None:
         self.quiz_repo = quiz_repo
@@ -37,15 +43,56 @@ class QuizGeneratorService:
         difficulty: Difficulty = Difficulty.MEDIUM,
         temperature: float = 0.3,
         save_immediately: bool = False,
-        author_name: str = "Gemini AI",
+        author_name: str = "AI Quiz Generator",
     ) -> GeneratedQuizResponse:
-        """Sinh đề trắc nghiệm từ văn bản hoặc chủ đề."""
+        """Sinh đề trắc nghiệm từ văn bản hoặc chủ đề (ưu tiên Mistral AI)."""
         if not topic and not content:
             topic = "Kiến thức Tổng quát"
 
-        # Nếu chưa có GEMINI_API_KEY -> Sử dụng Mock Generator để dev không bị gián đoạn
-        if not has_gemini_key():
-            logger.info("Chưa có GEMINI_API_KEY, kích hoạt Mock Generator.")
+        system_prompt = build_system_prompt(temperature)
+        user_prompt = build_user_prompt(
+            topic=topic,
+            content=content,
+            num_questions=num_questions,
+            difficulty=difficulty,
+        )
+
+        quiz_resp: GeneratedQuizResponse | None = None
+        actual_provider = "Mock AI"
+
+        # 1. Ưu tiên sử dụng Mistral AI để sinh câu hỏi
+        if has_mistral_key():
+            try:
+                logger.info("Đang sinh câu hỏi bằng Mistral AI...")
+                raw_response = await call_mistral_chat(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    temperature=temperature,
+                )
+                quiz_resp = self._parse_llm_json(raw_response, default_difficulty=difficulty)
+                actual_provider = "Mistral AI"
+            except Exception as e:
+                logger.warning(
+                    f"Sinh câu hỏi bằng Mistral AI thất bại ({e}), chuyển sang kiểm tra fallback..."
+                )
+
+        # 2. Fallback sang Gemini AI nếu Mistral không có key hoặc gặp lỗi
+        if quiz_resp is None and has_gemini_key():
+            try:
+                logger.info("Đang sinh câu hỏi bằng Gemini AI (fallback)...")
+                raw_response = await call_gemini_chat(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    temperature=temperature,
+                )
+                quiz_resp = self._parse_llm_json(raw_response, default_difficulty=difficulty)
+                actual_provider = "Gemini AI"
+            except Exception as e:
+                logger.error(f"Sinh câu hỏi bằng Gemini AI thất bại: {e}")
+
+        # 3. Fallback sang Mock Generator nếu không có API key hoặc cả hai đều lỗi
+        if quiz_resp is None:
+            logger.info("Kích hoạt Mock Generator làm fallback.")
             quiz_resp = self._generate_mock_quiz(
                 topic=topic or "Đề trắc nghiệm từ tài liệu",
                 content=content,
@@ -53,21 +100,12 @@ class QuizGeneratorService:
                 difficulty=difficulty,
                 temperature=temperature,
             )
-        else:
-            system_prompt = build_system_prompt(temperature)
-            user_prompt = build_user_prompt(
-                topic=topic,
-                content=content,
-                num_questions=num_questions,
-                difficulty=difficulty,
-            )
+            actual_provider = "Mock Generator"
 
-            raw_response = await call_gemini_chat(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                temperature=temperature,
-            )
-            quiz_resp = self._parse_llm_json(raw_response, default_difficulty=difficulty)
+        # Điều chỉnh author_name nếu đang dùng giá trị mặc định chung
+        final_author = author_name
+        if not final_author or final_author in ("Gemini AI", "Mistral AI", "AI Quiz Generator", "Gemini OCR + AI"):
+            final_author = actual_provider
 
         # Lưu ngay vào database nếu được yêu cầu
         if save_immediately:
@@ -77,7 +115,7 @@ class QuizGeneratorService:
                     description=quiz_resp.description,
                     category=quiz_resp.category,
                     difficulty=quiz_resp.difficulty,
-                    author_name=author_name,
+                    author_name=final_author,
                     questions=quiz_resp.questions,
                 )
             )
@@ -93,10 +131,13 @@ class QuizGeneratorService:
         difficulty: Difficulty = Difficulty.MEDIUM,
         temperature: float = 0.0,
         save_immediately: bool = False,
-        author_name: str = "Gemini OCR + AI",
+        author_name: str = "AI Quiz Generator",
+        preferred_engine: str = "auto",
     ) -> GeneratedQuizResponse:
         """Nhận ảnh, trích xuất text qua OCR và đưa vào LLM theo nhiệt độ temperature."""
-        ocr_text = await extract_text_from_image(image_bytes)
+        ocr_text = await extract_text_from_image(
+            image_bytes, preferred_engine=preferred_engine
+        )
         if not ocr_text.strip():
             # Nếu không tìm thấy text trong ảnh, vẫn tạo mock fallback
             ocr_text = "Ảnh đề thi trắc nghiệm mẫu (Không phát hiện chữ rõ ràng trong ảnh)."
@@ -227,3 +268,41 @@ class QuizGeneratorService:
             difficulty=difficulty,
             questions=questions,
         )
+
+    async def clean_text(self, raw_text: str, target_language: str = "vi") -> str:
+        """Làm sạch văn bản OCR thô bằng AI (sửa dấu tiếng Việt, chuẩn hóa cấu trúc)."""
+        if not has_mistral_key() and not has_gemini_key():
+            logger.info("Không có API key AI nào — trả nguyên raw_text làm fallback.")
+            return raw_text
+
+        system_prompt, user_prompt = build_clean_text_prompt(raw_text, target_language)
+        raw_response: str | None = None
+        try:
+            if has_mistral_key():
+                raw_response = await call_mistral_chat(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    temperature=0.2,
+                )
+            elif has_gemini_key():
+                raw_response = await call_gemini_chat(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    temperature=0.2,
+                )
+        except Exception as e:
+            logger.error(f"Lỗi khi gọi AI để làm sạch text: {e}", exc_info=True)
+            raise ExternalServiceError("Không thể kết nối với dịch vụ AI. Vui lòng thử lại sau.")
+
+        if not raw_response:
+            return raw_text
+
+        try:
+            cleaned = raw_response.strip()
+            cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+            cleaned = re.sub(r"\s*```$", "", cleaned)
+            parsed = json.loads(cleaned)
+            return parsed.get("cleanedText", raw_text)
+        except Exception:
+            logger.warning("Không parse được JSON từ AI clean-text, dùng raw_text fallback.")
+            return raw_text
