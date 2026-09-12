@@ -26,10 +26,8 @@ def extract_text_from_image(image_bytes: bytes) -> str:
     Sử dụng RapidOCR (ONNX runtime) hỗ trợ tiếng Việt và tiếng Anh có dấu.
     """
     try:
-        # Load image qua PIL để chuẩn hóa format RGB
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         engine = get_ocr_engine()
-        result, elapse_list = engine(image)
+        result, elapse_list = engine(image_bytes)
 
         if not result:
             return ""
