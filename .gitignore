@@ -12,8 +12,12 @@ ENV/
 .ruff_cache/
 *.sqlite
 *.db
-.agents/
+*.pth
+*.bin
 
+# Test data & user images
+**/img_test/
+.agents/
 # Node / Next.js
 node_modules/
 .next/
