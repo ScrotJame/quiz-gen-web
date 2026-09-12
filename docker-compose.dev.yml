@@ -1,0 +1,68 @@
+# ==============================================================================
+# DEVELOPMENT DOCKER COMPOSE CONFIGURATION
+# ==============================================================================
+# Sử dụng cho môi trường phát triển (Dev) với tính năng Hot-Reload.
+# Kết nối trực tiếp tới PostgreSQL đang chạy trên máy chủ host qua 'host.docker.internal:5432'.
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. BACKEND: FastAPI Dev (Hot-Reload qua Volume Mount)
+  # ----------------------------------------------------------------------------
+  backend-dev:
+    build:
+      context: ./back-end
+      dockerfile: Dockerfile
+      target: runner
+    container_name: quiz_backend_dev
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./back-end/src:/app/src
+    environment:
+      APP_NAME: "Quiz Web Backend (Dev)"
+      APP_ENV: "development"
+      APP_PORT: "8000"
+      APP_HOST: "0.0.0.0"
+      LOG_LEVEL: "DEBUG"
+      DATABASE_URL: "${DATABASE_URL:-postgresql+asyncpg://postgres:Cuongbghg21%40@host.docker.internal:5432/web_quiz}"
+      DB_ECHO: "true"
+      CORS_ORIGINS: "http://localhost:3000,http://127.0.0.1:3000"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      GEMINI_MODEL: "${GEMINI_MODEL:-gemini-2.5-flash}"
+      GEMINI_OCR_MODEL: "${GEMINI_OCR_MODEL:-gemini-2.5-flash}"
+      MISTRAL_API_KEY: "${MISTRAL_API_KEY:-}"
+      LOCAL_OCR_ENABLED: "true"
+    ports:
+      - "8000:8000"
+    command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    networks:
+      - quiz_net
+
+  # ----------------------------------------------------------------------------
+  # 2. FRONTEND: Next.js Dev (Hot-Reload qua Volume Mount)
+  # ----------------------------------------------------------------------------
+  frontend-dev:
+    image: node:20-alpine
+    container_name: quiz_frontend_dev
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./front-end:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    command: sh -c "npm install && npm run dev"
+    depends_on:
+      - backend-dev
+    networks:
+      - quiz_net
+
+networks:
+  quiz_net:
+    driver: bridge
