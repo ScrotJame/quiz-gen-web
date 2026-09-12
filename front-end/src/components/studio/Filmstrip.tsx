@@ -13,7 +13,7 @@ import {
   RefreshCw,
   Image as ImageIcon,
 } from "lucide-react";
-import { StudioPageItem } from "../../lib/types";
+import { OcrRetryOptions, StudioPageItem } from "../../lib/types";
 
 interface FilmstripProps {
   pages: StudioPageItem[];
@@ -23,7 +23,7 @@ interface FilmstripProps {
   onRotatePage: (index: number) => void;
   onDeletePage: (index: number) => void;
   onMovePage: (index: number, direction: "up" | "down") => void;
-  onRetryPage: (index: number) => void;
+  onRetryPage: (index: number, options?: OcrRetryOptions) => void;
 }
 
 export function Filmstrip({
@@ -198,16 +198,33 @@ export function Filmstrip({
                           Đang nhận diện OCR...
                         </span>
                       )}
-                      {page.status === "success" && (
-                        <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-                          <span className="inline-flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400 font-medium">
-                            <CheckCircle2 className="h-3 w-3" />
-                            {Math.round(page.confidence * 100)}%
-                          </span>
-                          <span>•</span>
-                          <span>{page.lineCount} dòng</span>
-                        </div>
-                      )}
+                      {page.status === "success" && (() => {
+                        const isLocal =
+                          page.provider === "local_vietocr" ||
+                          (!page.provider && page.confidence < 0.99);
+
+                        return (
+                          <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400 flex-wrap">
+                            <span
+                              className={`inline-flex items-center gap-0.5 font-medium ${
+                                isLocal
+                                  ? "text-amber-600 dark:text-amber-400"
+                                  : "text-emerald-600 dark:text-emerald-400"
+                              }`}
+                            >
+                              <CheckCircle2 className="h-3 w-3" />
+                              {Math.round(page.confidence * 100)}%
+                            </span>
+                            <span>•</span>
+                            <span>{page.lineCount} dòng</span>
+                            {isLocal && (
+                              <span className="rounded bg-amber-100 dark:bg-amber-950/80 px-1.5 py-0.2 text-[9px] font-bold text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                                Cần sửa
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                       {page.status === "error" && (
                         <div className="flex items-center gap-1.5">
                           <span className="text-[11px] font-medium text-rose-600 dark:text-rose-400 truncate">

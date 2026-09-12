@@ -113,7 +113,19 @@ export interface OcrPageResponse {
   text: string;
   lineCount: number;
   averageConfidence: number;
+  /** "gemini" | "local_vietocr" | "unknown" */
+  provider?: string;
 }
+
+export interface OcrRetryOptions {
+  engine?: "auto" | "gemini" | "local_vietocr";
+  unclipRatio?: number;
+  boxThresh?: number;
+  limitSideLen?: number;
+  enableClahe?: boolean;
+  splitTallBoxes?: boolean;
+}
+
 
 export interface CleanTextRequest {
   rawText: string;
@@ -133,6 +145,7 @@ export interface StudioPageItem {
   text: string;
   lineCount: number;
   confidence: number;
+  provider?: string;
   errorMessage?: string;
 }
 

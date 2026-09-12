@@ -7,6 +7,7 @@ import {
   Difficulty,
   GeneratedQuizResponse,
   OcrPageResponse,
+  OcrRetryOptions,
   PaginatedQuizList,
   QuizCreatePayload,
   QuizDetail,
@@ -21,8 +22,13 @@ async function handleResponse<T>(res: Response): Promise<T> {
     let errorCode = "UNKNOWN_ERROR";
     try {
       const err = await res.json();
-      errorDetail = err.detail || err.message || errorDetail;
-      errorCode = err.error_code || err.errorCode || `HTTP_${res.status}`;
+      if (typeof err.detail === "object" && err.detail !== null) {
+        errorDetail = err.detail.message || JSON.stringify(err.detail);
+        errorCode = err.detail.error_code || err.detail.errorCode || errorCode;
+      } else {
+        errorDetail = err.detail || err.message || errorDetail;
+      }
+      errorCode = err.error_code || err.errorCode || errorCode;
     } catch {
       errorDetail = res.statusText || errorDetail;
     }
@@ -199,11 +205,39 @@ export async function submitAttempt(
 }
 
 /**
- * Trích xuất OCR một trang ảnh đơn lẻ (kèm metadata: lineCount, averageConfidence)
+ * Trích xuất OCR một trang ảnh đơn lẻ (kèm metadata: lineCount, averageConfidence, và tùy chọn trọng số)
  */
-export async function ocrPage(file: Blob | File): Promise<OcrPageResponse> {
+export async function ocrPage(
+  file: Blob | File,
+  options?: OcrRetryOptions | string
+): Promise<OcrPageResponse> {
   const formData = new FormData();
   formData.append("file", file);
+
+  if (typeof options === "string") {
+    if (options && options !== "auto") {
+      formData.append("engine", options);
+    }
+  } else if (options) {
+    if (options.engine && options.engine !== "auto") {
+      formData.append("engine", options.engine);
+    }
+    if (options.unclipRatio !== undefined) {
+      formData.append("unclip_ratio", String(options.unclipRatio));
+    }
+    if (options.boxThresh !== undefined) {
+      formData.append("box_thresh", String(options.boxThresh));
+    }
+    if (options.limitSideLen !== undefined) {
+      formData.append("limit_side_len", String(options.limitSideLen));
+    }
+    if (options.enableClahe !== undefined) {
+      formData.append("enable_clahe", String(options.enableClahe));
+    }
+    if (options.splitTallBoxes !== undefined) {
+      formData.append("split_tall_boxes", String(options.splitTallBoxes));
+    }
+  }
 
   const res = await fetch(`${API_BASE_URL}/api/v1/ai/ocr-page`, {
     method: "POST",

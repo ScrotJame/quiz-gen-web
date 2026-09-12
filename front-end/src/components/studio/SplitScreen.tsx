@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   ZoomIn,
   ZoomOut,
@@ -14,8 +14,13 @@ import {
   FileText,
   AlertCircle,
   Loader2,
+  SlidersHorizontal,
+  RotateCcw,
+  Sparkles,
+  Cpu,
+  X,
 } from "lucide-react";
-import { StudioPageItem } from "../../lib/types";
+import { OcrRetryOptions, StudioPageItem } from "../../lib/types";
 
 interface SplitScreenProps {
   pages: StudioPageItem[];
@@ -23,10 +28,19 @@ interface SplitScreenProps {
   onSelectPage: (index: number) => void;
   onTextChange: (index: number, newText: string) => void;
   onRotatePage: (index: number) => void;
-  onRetryPage: (index: number) => void;
+  onRetryPage: (index: number, options?: OcrRetryOptions) => void;
   onContinue: () => void;
   canContinue: boolean;
 }
+
+const DEFAULT_OCR_OPTIONS: OcrRetryOptions = {
+  engine: "auto",
+  unclipRatio: 1.35,
+  boxThresh: 0.42,
+  limitSideLen: 1024,
+  enableClahe: true,
+  splitTallBoxes: true,
+};
 
 export function SplitScreen({
   pages,
@@ -40,6 +54,40 @@ export function SplitScreen({
 }: SplitScreenProps) {
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [copied, setCopied] = useState(false);
+  const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [retryOptions, setRetryOptions] = useState<OcrRetryOptions>(DEFAULT_OCR_OPTIONS);
+  const settingsRef = useRef<HTMLDivElement>(null);
+
+  // Click outside to close settings popover
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
+        setShowSettings(false);
+      }
+    }
+    if (showSettings) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showSettings]);
+
+  const isCustomized =
+    retryOptions.engine !== "auto" ||
+    (retryOptions.unclipRatio !== undefined && retryOptions.unclipRatio !== 1.35) ||
+    (retryOptions.boxThresh !== undefined && retryOptions.boxThresh !== 0.42) ||
+    (retryOptions.limitSideLen !== undefined && retryOptions.limitSideLen !== 1024) ||
+    !retryOptions.enableClahe ||
+    !retryOptions.splitTallBoxes;
+
+  const handleApplyRetry = (opts?: OcrRetryOptions) => {
+    const finalOpts = opts || retryOptions;
+    setShowSettings(false);
+    onRetryPage(selectedIndex, finalOpts);
+  };
+
+  const handleResetDefaults = () => {
+    setRetryOptions(DEFAULT_OCR_OPTIONS);
+  };
 
   const currentPage = pages[selectedIndex];
 
@@ -163,33 +211,346 @@ export function SplitScreen({
               <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
                 Văn bản OCR nhận diện
               </span>
-              {currentPage.status === "success" && (
-                <div className="flex items-center gap-1.5">
-                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/50">
-                    {Math.round(currentPage.confidence * 100)}% chuẩn xác
-                  </span>
-                  <span className="text-[11px] text-zinc-400">
-                    • {currentPage.lineCount} dòng
-                  </span>
-                </div>
-              )}
+              {currentPage.status === "success" && (() => {
+                const isLocal =
+                  currentPage.provider === "local_vietocr" ||
+                  (!currentPage.provider && currentPage.confidence < 0.99);
+
+                return (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                        isLocal
+                          ? "bg-amber-50 text-amber-700 border-amber-200/70 dark:bg-amber-950/60 dark:text-amber-400 dark:border-amber-800/50"
+                          : "bg-emerald-50 text-emerald-700 border-emerald-200/50 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800/50"
+                      }`}
+                    >
+                      {Math.round(currentPage.confidence * 100)}% chuẩn xác
+                    </span>
+                    <span className="text-[11px] text-zinc-400">
+                      • {currentPage.lineCount} dòng
+                    </span>
+                    {isLocal && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-950/80 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shadow-sm"
+                        title="Văn bản nhận diện từ Local OCR — khuyến nghị xem lại và chỉnh sửa trước khi sinh đề"
+                      >
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        Cần chỉnh sửa
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => onRetryPage(selectedIndex)}
-                disabled={currentPage.status === "scanning"}
-                className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                title="Quét lại OCR trang này"
-              >
-                <RefreshCw
-                  className={`h-3.5 w-3.5 ${
-                    currentPage.status === "scanning" ? "animate-spin text-indigo-600" : ""
-                  }`}
-                />
-                <span className="hidden sm:inline">Quét lại</span>
-              </button>
+              {/* Composite Quét lại + Nút tùy chỉnh trọng số */}
+              <div className="relative" ref={settingsRef}>
+                <div className="inline-flex items-center rounded-lg border border-zinc-200 bg-white shadow-xs dark:border-zinc-700 dark:bg-zinc-800">
+                  <button
+                    type="button"
+                    onClick={() => handleApplyRetry()}
+                    disabled={currentPage.status === "scanning"}
+                    className="inline-flex items-center gap-1.5 rounded-l-lg px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50 dark:text-zinc-200 dark:hover:bg-zinc-750"
+                    title="Quét lại OCR trang này"
+                  >
+                    <RefreshCw
+                      className={`h-3.5 w-3.5 ${
+                        currentPage.status === "scanning"
+                          ? "animate-spin text-indigo-600 dark:text-indigo-400"
+                          : "text-zinc-500"
+                      }`}
+                    />
+                    <span className="hidden sm:inline">Quét lại</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowSettings((v) => !v)}
+                    disabled={currentPage.status === "scanning"}
+                    className={`relative inline-flex items-center rounded-r-lg border-l border-zinc-200 px-2 py-1 text-xs hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-750 ${
+                      showSettings
+                        ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400"
+                        : "text-zinc-500 dark:text-zinc-400"
+                    }`}
+                    title="Tùy chỉnh thông số Local OCR trước khi quét lại"
+                  >
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                    {isCustomized && (
+                      <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-600"></span>
+                      </span>
+                    )}
+                  </button>
+                </div>
+
+                {/* Popover tùy chỉnh trọng số */}
+                {showSettings && (
+                  <div className="absolute right-0 top-full mt-2 w-[340px] sm:w-[380px] rounded-2xl border border-zinc-200/90 bg-white/95 p-4 shadow-2xl backdrop-blur-md z-50 dark:border-zinc-800 dark:bg-zinc-900/95">
+                    {/* Header */}
+                    <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                      <div className="flex items-center gap-2">
+                        <div className="rounded-lg bg-indigo-50 p-1.5 text-indigo-600 dark:bg-indigo-950/70 dark:text-indigo-400">
+                          <SlidersHorizontal className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                            Cấu hình OCR & Trọng số
+                          </h4>
+                          <p className="text-[11px] text-zinc-500">
+                            Dành cho trường hợp chữ mờ hoặc Gemini lỗi
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowSettings(false)}
+                        className="rounded-lg p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    {/* Body */}
+                    <div className="py-3 space-y-4 max-h-[60vh] overflow-y-auto pr-1 text-xs">
+                      {/* Workflow Banner */}
+                      <div className="rounded-xl bg-indigo-50/90 p-3 dark:bg-indigo-950/50 border border-indigo-200/80 dark:border-indigo-800/60 flex items-start gap-2.5">
+                        <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+                        <div className="text-[11px] text-indigo-950 dark:text-indigo-200 leading-relaxed">
+                          <strong className="font-bold">Quy trình quét thông minh:</strong> Luôn gọi <strong>AI Gemini Vision OCR trước</strong> để trích xuất chữ và công thức. Nếu Gemini không nhận diện được hoặc gặp lỗi (429/mất mạng), hệ thống sẽ <strong>tự động chuyển sang Local OCR</strong> với các trọng số tinh chỉnh bên dưới.
+                        </div>
+                      </div>
+
+                      {/* Engine Selector */}
+                      <div>
+                        <label className="block text-[11px] font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                          Chế độ quét
+                        </label>
+                        <div className="grid grid-cols-3 gap-1.5 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setRetryOptions((prev) => ({ ...prev, engine: "auto" }))
+                            }
+                            className={`rounded-md py-1.5 px-1.5 text-[11px] font-medium transition-all ${
+                              retryOptions.engine === "auto"
+                                ? "bg-white text-indigo-600 font-bold shadow-xs dark:bg-zinc-700 dark:text-indigo-300"
+                                : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
+                            }`}
+                            title="Ưu tiên Gemini OCR trước -> Tự động chuyển Local OCR nếu Gemini không tìm thấy chữ"
+                          >
+                            Tự động (Chuẩn)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setRetryOptions((prev) => ({ ...prev, engine: "local_vietocr" }))
+                            }
+                            className={`rounded-md py-1.5 px-1.5 text-[11px] font-medium transition-all ${
+                              retryOptions.engine === "local_vietocr"
+                                ? "bg-white text-indigo-600 font-bold shadow-xs dark:bg-zinc-700 dark:text-indigo-300"
+                                : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
+                            }`}
+                            title="Bỏ qua Gemini, quét trực tiếp bằng Local RapidOCR + VietOCR"
+                          >
+                            Chỉ Local OCR
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setRetryOptions((prev) => ({ ...prev, engine: "gemini" }))
+                            }
+                            className={`rounded-md py-1.5 px-1.5 text-[11px] font-medium transition-all ${
+                              retryOptions.engine === "gemini"
+                                ? "bg-white text-indigo-600 font-bold shadow-xs dark:bg-zinc-700 dark:text-indigo-300"
+                                : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
+                            }`}
+                            title="Chỉ dùng Gemini Vision OCR"
+                          >
+                            Chỉ Gemini
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Detector Parameters (Hiển thị khi chọn Local OCR hoặc Auto) */}
+                      {retryOptions.engine !== "gemini" && (
+                        <div className="space-y-3.5 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+                          <div className="flex items-center gap-1.5">
+                            <Cpu className="h-3.5 w-3.5 text-indigo-500" />
+                            <span className="font-bold text-zinc-800 dark:text-zinc-200 text-[11px]">
+                              Trọng số Local OCR (Dự phòng phòng khi Gemini không nhận diện được)
+                            </span>
+                          </div>
+                          {/* Unclip Ratio Slider */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                                Mở rộng viền dòng (Unclip)
+                              </span>
+                              <span className="rounded bg-indigo-50 px-1.5 py-0.5 font-mono text-[11px] font-bold text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+                                {retryOptions.unclipRatio ?? 1.35}x
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min="1.10"
+                              max="1.80"
+                              step="0.05"
+                              value={retryOptions.unclipRatio ?? 1.35}
+                              onChange={(e) =>
+                                setRetryOptions((prev) => ({
+                                  ...prev,
+                                  unclipRatio: parseFloat(e.target.value),
+                                }))
+                              }
+                              className="w-full accent-indigo-600 cursor-pointer"
+                            />
+                            <p className="text-[10px] text-zinc-400 mt-0.5">
+                              Tăng nếu bị cắt xén viền chữ/dấu; giảm nếu 2 dòng bị gộp dính.
+                            </p>
+                          </div>
+
+                          {/* Box Thresh Slider */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                                Ngưỡng nhận diện (Box Thresh)
+                              </span>
+                              <span className="rounded bg-indigo-50 px-1.5 py-0.5 font-mono text-[11px] font-bold text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+                                {retryOptions.boxThresh ?? 0.42}
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min="0.25"
+                              max="0.65"
+                              step="0.01"
+                              value={retryOptions.boxThresh ?? 0.42}
+                              onChange={(e) =>
+                                setRetryOptions((prev) => ({
+                                  ...prev,
+                                  boxThresh: parseFloat(e.target.value),
+                                }))
+                              }
+                              className="w-full accent-indigo-600 cursor-pointer"
+                            />
+                            <p className="text-[10px] text-zinc-400 mt-0.5">
+                              Giảm để bắt chữ mờ/nhạt; tăng để lọc bớt nhiễu hoặc đường kẻ.
+                            </p>
+                          </div>
+
+                          {/* Limit Side Len Chips */}
+                          <div>
+                            <span className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                              Độ phân giải xử lý ảnh
+                            </span>
+                            <div className="grid grid-cols-4 gap-1">
+                              {[
+                                { label: "960px", val: 960 },
+                                { label: "1024px", val: 1024 },
+                                { label: "1280px", val: 1280 },
+                                { label: "1536px", val: 1536 },
+                              ].map((item) => (
+                                <button
+                                  key={item.val}
+                                  type="button"
+                                  onClick={() =>
+                                    setRetryOptions((prev) => ({
+                                      ...prev,
+                                      limitSideLen: item.val,
+                                    }))
+                                  }
+                                  className={`rounded-lg py-1 text-[11px] font-medium border text-center transition-all ${
+                                    (retryOptions.limitSideLen ?? 1024) === item.val
+                                      ? "border-indigo-500 bg-indigo-50 text-indigo-700 font-bold dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-600"
+                                      : "border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                                  }`}
+                                >
+                                  {item.label}
+                                </button>
+                              ))}
+                            </div>
+                            <p className="text-[10px] text-zinc-400 mt-0.5">
+                              Chọn 1280px hoặc 1536px đối với ảnh bài thi có chữ in nhỏ.
+                            </p>
+                          </div>
+
+                          {/* Toggles */}
+                          <div className="space-y-2 pt-1">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={retryOptions.enableClahe ?? true}
+                                onChange={(e) =>
+                                  setRetryOptions((prev) => ({
+                                    ...prev,
+                                    enableClahe: e.target.checked,
+                                  }))
+                                }
+                                className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-800"
+                              />
+                              <div>
+                                <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                                  Tăng tương phản cục bộ (CLAHE)
+                                </span>
+                                <p className="text-[10px] text-zinc-400">
+                                  Cân bằng độ sáng khi chụp bị bóng mờ
+                                </p>
+                              </div>
+                            </label>
+
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={retryOptions.splitTallBoxes ?? true}
+                                onChange={(e) =>
+                                  setRetryOptions((prev) => ({
+                                    ...prev,
+                                    splitTallBoxes: e.target.checked,
+                                  }))
+                                }
+                                className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-800"
+                              />
+                              <div>
+                                <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                                  Tách khối chữ cao (Auto-split)
+                                </span>
+                                <p className="text-[10px] text-zinc-400">
+                                  Tự động tách nếu phát hiện nhiều dòng bị gộp chung
+                                </p>
+                              </div>
+                            </label>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                      <button
+                        type="button"
+                        onClick={handleResetDefaults}
+                        className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        Mặc định
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleApplyRetry()}
+                        disabled={currentPage.status === "scanning"}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition-all disabled:opacity-50"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Áp dụng & Quét lại
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <button
                 type="button"

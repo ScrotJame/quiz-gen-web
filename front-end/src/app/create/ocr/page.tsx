@@ -11,6 +11,7 @@ import { MergeCleanPanel } from "../../../components/studio/MergeCleanPanel";
 import { QuizEditor } from "../../../components/studio/QuizEditor";
 import {
   Difficulty,
+  OcrRetryOptions,
   QuestionEdit,
   QuizCreatePayload,
   StudioPageItem,
@@ -163,7 +164,7 @@ export default function OcrStudioPage() {
   };
 
   // Process OCR for a single page item
-  const processOcrForPage = async (pageItem: StudioPageItem) => {
+  const processOcrForPage = async (pageItem: StudioPageItem, options?: OcrRetryOptions) => {
     setPages((prev) =>
       prev.map((p) =>
         p.id === pageItem.id
@@ -173,7 +174,7 @@ export default function OcrStudioPage() {
     );
 
     try {
-      const res = await ocrPage(pageItem.file);
+      const res = await ocrPage(pageItem.file, options);
       setPages((prev) =>
         prev.map((p) =>
           p.id === pageItem.id
@@ -183,6 +184,7 @@ export default function OcrStudioPage() {
                 text: res.text,
                 lineCount: res.lineCount,
                 confidence: res.averageConfidence,
+                provider: res.provider,
               }
             : p
         )
@@ -290,10 +292,10 @@ export default function OcrStudioPage() {
   };
 
   // Retry page OCR
-  const handleRetryPage = (index: number) => {
+  const handleRetryPage = (index: number, options?: OcrRetryOptions) => {
     const target = pages[index];
     if (target) {
-      processOcrForPage(target);
+      processOcrForPage(target, options);
     }
   };
 
