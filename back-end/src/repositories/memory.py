@@ -8,6 +8,7 @@ from src.models.schemas import (
     AttemptAnswerDetail,
     AttemptResult,
     AttemptStatus,
+    DashboardStats,
     LeaderboardEntry,
     OptionSchema,
     QuestionCreate,
@@ -23,8 +24,9 @@ from src.repositories.base import AttemptRepository, QuizRepository
 class InMemoryQuizRepository(QuizRepository):
     """In-memory test double cho QuizRepository."""
 
-    def __init__(self) -> None:
+    def __init__(self, attempt_repo: InMemoryAttemptRepository | None = None) -> None:
         self.quizzes: dict[uuid.UUID, QuizDetail] = {}
+        self.attempt_repo = attempt_repo
 
     async def list_quizzes(
         self,
@@ -171,6 +173,29 @@ class InMemoryQuizRepository(QuizRepository):
                     quiz.updated_at = datetime.now(timezone.utc)
                     return True
         return False
+
+    async def get_dashboard_stats(self) -> DashboardStats:
+        total_quizzes = len(self.quizzes)
+        total_attempts = 0
+        average_score = 0.0
+        total_questions_completed = 0
+
+        if self.attempt_repo:
+            completed_attempts = [
+                a for a in self.attempt_repo.attempts.values()
+                if a.status == AttemptStatus.COMPLETED
+            ]
+            total_attempts = len(completed_attempts)
+            if total_attempts > 0:
+                average_score = round(sum(a.percentage for a in completed_attempts) / total_attempts, 1)
+                total_questions_completed = sum(len(a.answers) for a in completed_attempts)
+
+        return DashboardStats(
+            total_quizzes=total_quizzes,
+            average_score=average_score,
+            total_questions_completed=total_questions_completed,
+            total_attempts=total_attempts,
+        )
 
 
 class InMemoryAttemptRepository(AttemptRepository):

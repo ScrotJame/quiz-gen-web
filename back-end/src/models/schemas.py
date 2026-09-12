@@ -114,6 +114,13 @@ class QuizDetail(QuizBase):
     questions: list[QuestionSchema] = Field(default_factory=list)
 
 
+class DashboardStats(CamelModel):
+    total_quizzes: int = 0
+    average_score: float = 0.0
+    total_questions_completed: int = 0
+    total_attempts: int = 0
+
+
 # ---------------------------------------------------------------- attempts
 
 
@@ -182,3 +189,21 @@ class GeneratedQuizResponse(CamelModel):
     difficulty: Difficulty
     questions: list[QuestionCreate]
     saved_quiz_id: uuid.UUID | None = None
+
+
+# --- OCR Studio
+
+
+class OcrPageResponse(CamelModel):
+    text: str
+    line_count: int = 0
+    average_confidence: float = 0.0
+
+
+class CleanTextRequest(CamelModel):
+    raw_text: str
+    target_language: str = "vi"
+
+
+class CleanTextResponse(CamelModel):
+    cleaned_text: str

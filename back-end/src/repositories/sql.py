@@ -13,6 +13,7 @@ from src.models.schemas import (
     AttemptAnswerDetail,
     AttemptResult,
     AttemptStatus,
+    DashboardStats,
     LeaderboardEntry,
     OptionSchema,
     QuestionCreate,
@@ -264,6 +265,34 @@ class SqlQuizRepository(QuizRepository):
             await session.delete(q)
             await session.commit()
             return True
+
+    async def get_dashboard_stats(self) -> DashboardStats:
+        async with self.session_factory() as session:
+            quiz_count_stmt = select(func.count(QuizTable.id))
+            total_quizzes = (await session.execute(quiz_count_stmt)).scalar() or 0
+
+            attempt_stats_stmt = select(
+                func.count(AttemptTable.id),
+                func.avg(AttemptTable.percentage),
+            ).where(AttemptTable.status == AttemptStatus.COMPLETED)
+            res = (await session.execute(attempt_stats_stmt)).first()
+            total_attempts = res[0] if res and res[0] is not None else 0
+            raw_avg = res[1] if res and res[1] is not None else 0.0
+            average_score = round(float(raw_avg), 1)
+
+            answers_stmt = (
+                select(func.count(AttemptAnswerTable.id))
+                .join(AttemptTable, AttemptAnswerTable.attempt_id == AttemptTable.id)
+                .where(AttemptTable.status == AttemptStatus.COMPLETED)
+            )
+            total_questions_completed = (await session.execute(answers_stmt)).scalar() or 0
+
+            return DashboardStats(
+                total_quizzes=total_quizzes,
+                average_score=average_score,
+                total_questions_completed=total_questions_completed,
+                total_attempts=total_attempts,
+            )
 
 
 class SqlAttemptRepository(AttemptRepository):

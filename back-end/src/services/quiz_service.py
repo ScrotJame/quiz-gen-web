@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 from src.models.schemas import (
+    DashboardStats,
     QuestionCreate,
     QuestionSchema,
     QuestionType,
@@ -41,6 +42,9 @@ class QuizService:
             limit=limit,
             offset=offset,
         )
+
+    async def get_dashboard_stats(self) -> DashboardStats:
+        return await self.repo.get_dashboard_stats()
 
     async def get_quiz(self, quiz_id: uuid.UUID) -> QuizDetail:
         quiz = await self.repo.get_quiz(quiz_id)

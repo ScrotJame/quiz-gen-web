@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from src.models.schemas import (
     AttemptAnswerDetail,
     AttemptResult,
+    DashboardStats,
     LeaderboardEntry,
     QuestionCreate,
     QuestionSchema,
@@ -66,6 +67,11 @@ class QuizRepository(ABC):
     @abstractmethod
     async def delete_question(self, question_id: uuid.UUID) -> bool:
         """Xóa câu hỏi khỏi đề thi."""
+        ...
+
+    @abstractmethod
+    async def get_dashboard_stats(self) -> DashboardStats:
+        """Lấy số liệu thống kê tổng quan cho trang Dashboard."""
         ...
 
 

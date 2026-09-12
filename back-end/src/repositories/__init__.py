@@ -28,6 +28,9 @@ __all__ = [
 def get_quiz_repo() -> QuizRepository:
     settings = get_settings()
     if settings.use_in_memory_repos:
+        attempt_repo = get_attempt_repo()
+        if isinstance(attempt_repo, InMemoryAttemptRepository):
+            return InMemoryQuizRepository(attempt_repo=attempt_repo)
         return InMemoryQuizRepository()
     return SqlQuizRepository()
 

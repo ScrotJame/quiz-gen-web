@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from src.api.deps import get_attempt_service, get_quiz_service
 from src.models.schemas import (
     CamelModel,
+    DashboardStats,
     LeaderboardEntry,
     QuestionCreate,
     QuestionSchema,
@@ -49,6 +50,14 @@ async def list_quizzes(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/quizzes/stats", response_model=DashboardStats)
+async def get_dashboard_stats(
+    service: Annotated[QuizService, Depends(get_quiz_service)],
+) -> DashboardStats:
+    """Lấy số liệu thống kê tổng quan cho trang Dashboard."""
+    return await service.get_dashboard_stats()
 
 
 @router.post("/quizzes", response_model=QuizDetail, status_code=status.HTTP_201_CREATED)
