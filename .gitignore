@@ -21,7 +21,7 @@ build/
 dist/
 
 # Environment files
-.env.local
+.env
 .env.*.local
 
 # IDE
