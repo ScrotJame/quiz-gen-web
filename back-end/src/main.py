@@ -26,13 +26,10 @@ async def lifespan(app: FastAPI):
 
     if not settings.use_in_memory_repos and settings.app_env != "test":
         try:
-            # Tự động tạo bảng nếu dùng SQLite
-            if "sqlite" in settings.database_url:
-                async with get_engine().begin() as conn:
-                    # Import models để metadata nhận diện đầy đủ bảng
-                    import src.models.tables  # noqa: F401
-                    await conn.run_sync(Base.metadata.create_all)
-                logger.info("Khởi tạo SQLite tables thành công.")
+            async with get_engine().begin() as conn:
+                import src.models.tables  # noqa: F401
+                await conn.run_sync(Base.metadata.create_all)
+            logger.info("Khởi tạo Database tables thành công.")
 
             # Kiểm tra kết nối DB ngay khi boot
             async with get_engine().connect() as conn:
