@@ -7,6 +7,7 @@ from sqlalchemy import text
 os.environ["APP_ENV"] = "test"
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_quiz.db"
 os.environ["USE_IN_MEMORY_REPOS"] = "false"
+os.environ["CORS_ORIGINS"] = "http://localhost:3000,http://127.0.0.1:3000"
 os.environ["MISTRAL_API_KEY"] = ""  # Rule 6: Mock/fallback trong test tự động, không gọi API thật
 os.environ["GEMINI_API_KEY"] = ""  # Rule 6: Mock/fallback trong test tự động, không gọi API thật
 

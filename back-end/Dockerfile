@@ -2,10 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-    libglib2.0-0 libgl1 \
+# System deps for OpenCV headless
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglib2.0-0 libgl1-mesa-glx \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

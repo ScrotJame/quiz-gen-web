@@ -16,6 +16,16 @@ mistralai>=1.0.0
 google-genai>=1.0.0
 pillow>=10.0.0
 
+# Local OCR (RapidOCR Det + VietOCR Seq2Seq Rec)
+rapidocr-onnxruntime>=1.2.0
+opencv-python-headless>=4.8.0
+onnxruntime>=1.17.0
+torch>=2.0.0
+torchvision>=0.15.0
+einops>=0.6.0
+gdown>=4.4.0
+vietocr>=0.3.13
+
 # Testing & Dev
 pytest>=8.0.0
 pytest-asyncio>=0.24.0

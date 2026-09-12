@@ -52,10 +52,12 @@ async def call_mistral_chat(
             response_format={"type": "json_object"},
         )
 
+        if not response.choices:
+            raise ValueError("Mistral không trả về kết quả nào (choices rỗng).")
         choice = response.choices[0]
         content = choice.message.content
-        if isinstance(content, str):
-            return content
+        if not content:
+            raise ValueError("Nội dung phản hồi từ Mistral AI bị rỗng.")
         return str(content)
     except Exception as e:
         logger.error(f"Lỗi khi gọi Mistral AI: {e}", exc_info=True)

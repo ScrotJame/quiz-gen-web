@@ -198,6 +198,8 @@ class OcrPageResponse(CamelModel):
     text: str
     line_count: int = 0
     average_confidence: float = 0.0
+    # "gemini" | "local_vietocr" | "unknown"
+    provider: str = "gemini"
 
 
 class CleanTextRequest(CamelModel):
