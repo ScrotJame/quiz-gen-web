@@ -12,6 +12,7 @@ ENV/
 .ruff_cache/
 *.sqlite
 *.db
+.agents/
 
 # Node / Next.js
 node_modules/
@@ -20,9 +21,10 @@ out/
 build/
 dist/
 
-# Environment files
-.env
-.env.*.local
+# Environment files (Strict secret protection)
+.env*
+!.env*.example
+!.env.example
 
 # IDE
 .idea/
