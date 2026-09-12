@@ -1,102 +1,35 @@
 services:
-  # ============================================================================
-  # 1. DATABASE: PostgreSQL 16
-  # ============================================================================
-  postgres:
-    image: postgres:16-alpine
-    container_name: quiz_postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-quiz_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quiz_secret_password}
-      POSTGRES_DB: ${POSTGRES_DB:-quiz_prod_db}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-quiz_user} -d ${POSTGRES_DB:-quiz_prod_db}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - quiz_network
-
-  # ============================================================================
-  # 2. BACKEND: FastAPI + Gemini 3.1 Flash Lite OCR
-  # ============================================================================
   backend:
     build:
       context: ./back-end
       dockerfile: Dockerfile
     container_name: quiz_backend
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      APP_NAME: "Quiz Web Backend"
-      APP_ENV: "production"
-      APP_PORT: 8000
-      APP_HOST: "0.0.0.0"
-      LOG_LEVEL: "WARNING"
-      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-quiz_user}:${POSTGRES_PASSWORD:-quiz_secret_password}@postgres:5432/${POSTGRES_DB:-quiz_prod_db}"
-      DB_ECHO: "false"
-      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:3000,http://frontend:3000}"
-      GEMINI_API_KEY: "${GEMINI_API_KEY}"
-      GEMINI_MODEL: "${GEMINI_MODEL:-gemini-3.1-flash-lite}"
-      GEMINI_OCR_MODEL: "${GEMINI_OCR_MODEL:-gemini-3.1-flash-lite}"
-      GEMINI_TEMPERATURE: "0.3"
-      MAX_UPLOAD_SIZE_MB: "10"
+    env_file:
+      - ./back-end/.env.production   # bạn tự tạo từ .env.production.example
     ports:
       - "8000:8000"
     networks:
-      - quiz_network
+      - quiz_net
 
-  # ============================================================================
-  # 3. FRONTEND: Next.js 16 Standalone
-  # ============================================================================
   frontend:
     build:
       context: ./front-end
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_BASE_URL: "${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}"
+        # URL mà trình duyệt dùng để gọi API (public)
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     container_name: quiz_frontend
     restart: unless-stopped
-    depends_on:
-      - backend
     environment:
-      NODE_ENV: "production"
-      PORT: 3000
+      - HOSTNAME=0.0.0.0
     ports:
       - "3000:3000"
-    networks:
-      - quiz_network
-
-  # ============================================================================
-  # 4. CLOUDFLARE TUNNEL (cloudflared)
-  # ============================================================================
-  # Điền CLOUDFLARE_TUNNEL_TOKEN vào file .env để kết nối tự động tới Cloudflare Zero Trust.
-  # Trong Cloudflare Zero Trust -> Access -> Tunnels -> Cấu hình Public Hostname:
-  #   - quiz.yourdomain.com     -> http://frontend:3000
-  #   - api.quiz.yourdomain.com -> http://backend:8000
-  # ============================================================================
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: quiz_cloudflared
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run
-    environment:
-      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:-}
     depends_on:
-      - frontend
       - backend
     networks:
-      - quiz_network
-
-volumes:
-  postgres_data:
-    driver: local
+      - quiz_net
 
 networks:
-  quiz_network:
+  quiz_net:
     driver: bridge
