@@ -46,18 +46,18 @@ export function QuestionCard({
   const isMultiple = question.questionType === "multiple_choice";
 
   return (
-    <div className="w-full rounded-3xl border border-zinc-200/90 bg-white p-6 shadow-sm sm:p-8 dark:border-zinc-800 dark:bg-zinc-900/90 transition-all">
+    <div className="w-full rounded-2xl sm:rounded-3xl border border-zinc-200/90 bg-white p-4.5 sm:p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/90 transition-all">
       {/* Question Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-5 border-b border-zinc-100 dark:border-zinc-800">
-        <div className="flex items-center gap-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 pb-4 sm:pb-5 border-b border-zinc-100 dark:border-zinc-800">
+        <div className="flex items-center gap-2">
           <span className="flex h-7 px-2.5 items-center justify-center rounded-lg bg-indigo-600 text-white font-bold text-xs tracking-wide">
             CÂU {index + 1} / {totalQuestions}
           </span>
           <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-            {question.points || 10} điểm
+            {question.points || 10}đ
           </span>
-          <span className="rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
-            {isMultiple ? "Chọn nhiều đáp án" : "Chọn 1 đáp án"}
+          <span className="rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-[10px] sm:text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
+            {isMultiple ? "Nhiều đáp án" : "1 đáp án"}
           </span>
         </div>
 
@@ -67,18 +67,18 @@ export function QuestionCard({
             <button
               type="button"
               onClick={onClearAnswer}
-              className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300 transition-colors"
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300 transition-colors min-h-[36px]"
               title="Xóa lựa chọn câu này"
             >
               <RotateCcw className="h-3 w-3" />
-              <span className="hidden sm:inline">Bỏ chọn</span>
+              <span className="text-xs">Bỏ chọn</span>
             </button>
           )}
 
           <button
             type="button"
             onClick={onToggleFlag}
-            className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
+            className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all duration-200 min-h-[36px] ${
               isFlagged
                 ? "border-amber-300 bg-amber-50 text-amber-700 shadow-xs dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
                 : "border-zinc-200 text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800"
@@ -90,7 +90,7 @@ export function QuestionCard({
                 isFlagged ? "fill-amber-500 text-amber-500" : "text-zinc-400"
               }`}
             />
-            <span>{isFlagged ? "Đã gắn cờ" : "Gắn cờ"}</span>
+            <span>{isFlagged ? "Đã cờ" : "Gắn cờ"}</span>
             <kbd className="hidden sm:inline-block rounded bg-zinc-200/70 px-1 py-0.2 text-[10px] font-mono text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
               F
             </kbd>
@@ -99,14 +99,14 @@ export function QuestionCard({
       </div>
 
       {/* Question Text */}
-      <div className="py-6">
-        <h2 className="text-lg sm:text-xl font-bold leading-relaxed tracking-tight text-zinc-900 dark:text-white max-w-3xl">
+      <div className="py-4 sm:py-6">
+        <h2 className="text-base sm:text-xl font-bold leading-relaxed tracking-tight text-zinc-900 dark:text-white max-w-3xl">
           {question.questionText}
         </h2>
       </div>
 
       {/* Options List */}
-      <div className="space-y-3">
+      <div className="space-y-2.5 sm:space-y-3">
         {question.options.map((option, optIdx) => {
           const isSelected = selectedOptionIds.includes(option.id);
           const letter = optionLabels[optIdx] || String(optIdx + 1);
@@ -116,7 +116,7 @@ export function QuestionCard({
               key={option.id}
               type="button"
               onClick={() => onSelectOption(option.id)}
-              className={`group relative flex w-full items-start gap-3.5 rounded-2xl border p-4 text-left transition-all duration-200 cursor-pointer ${
+              className={`group relative flex w-full items-start gap-3 rounded-xl sm:rounded-2xl border p-3.5 sm:p-4 text-left transition-all duration-200 cursor-pointer min-h-[52px] active:scale-[0.99] touch-manipulation ${
                 isSelected
                   ? "border-indigo-600 bg-indigo-50/70 shadow-sm ring-1 ring-indigo-600 dark:border-indigo-500 dark:bg-indigo-950/40 dark:ring-indigo-500"
                   : "border-zinc-200/80 bg-zinc-50/40 hover:border-indigo-200 hover:bg-indigo-50/20 dark:border-zinc-800/80 dark:bg-zinc-950/40 dark:hover:border-indigo-900 dark:hover:bg-zinc-800/50"
@@ -124,7 +124,7 @@ export function QuestionCard({
             >
               {/* Option Letter Tag */}
               <div
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl font-bold text-xs transition-colors ${
+                className={`flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg sm:rounded-xl font-bold text-xs transition-colors mt-0.5 ${
                   isSelected
                     ? "bg-indigo-600 text-white shadow-xs"
                     : "border border-zinc-300/80 bg-white text-zinc-700 group-hover:border-indigo-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
@@ -134,7 +134,7 @@ export function QuestionCard({
               </div>
 
               {/* Option Text */}
-              <div className="flex-1 pt-1">
+              <div className="flex-1 pt-0.5 min-w-0">
                 <p
                   className={`text-sm sm:text-base leading-relaxed font-medium transition-colors ${
                     isSelected

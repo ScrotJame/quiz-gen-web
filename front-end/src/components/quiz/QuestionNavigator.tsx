@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Flag } from "lucide-react";
+import { Flag, X } from "lucide-react";
 
 interface QuestionNavigatorProps {
   totalQuestions: number;
@@ -9,6 +9,7 @@ interface QuestionNavigatorProps {
   onSelectIndex: (index: number) => void;
   isAnswered: (index: number) => boolean;
   isFlagged: (index: number) => boolean;
+  onClose?: () => void;
 }
 
 type FilterType = "all" | "unanswered" | "flagged";
@@ -19,6 +20,7 @@ export function QuestionNavigator({
   onSelectIndex,
   isAnswered,
   isFlagged,
+  onClose,
 }: QuestionNavigatorProps) {
   const [filter, setFilter] = useState<FilterType>("all");
 
@@ -30,52 +32,75 @@ export function QuestionNavigator({
     return true;
   });
 
+  const handleSelectQuestion = (idx: number) => {
+    onSelectIndex(idx);
+    if (onClose) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="rounded-3xl border border-zinc-200/90 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/90">
+    <div className="rounded-2xl sm:rounded-3xl border border-zinc-200/90 bg-white p-4.5 sm:p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/90">
       {/* Navigator Header */}
       <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
-        <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-          <span>Danh sách câu hỏi</span>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+            Danh sách câu hỏi
+          </h3>
           <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs text-zinc-600 dark:text-zinc-400">
             {totalQuestions}
           </span>
-        </h3>
+        </div>
 
-        {/* Quick Filter Selector */}
-        <div className="flex items-center gap-1 text-[11px]">
-          <button
-            type="button"
-            onClick={() => setFilter("all")}
-            className={`rounded-lg px-2 py-1 transition-colors ${
-              filter === "all"
-                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold"
-                : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-            }`}
-          >
-            Tất cả
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter("unanswered")}
-            className={`rounded-lg px-2 py-1 transition-colors ${
-              filter === "unanswered"
-                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold"
-                : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-            }`}
-          >
-            Chưa làm
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilter("flagged")}
-            className={`rounded-lg px-2 py-1 transition-colors ${
-              filter === "flagged"
-                ? "bg-amber-500 text-white font-semibold"
-                : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-            }`}
-          >
-            Gắn cờ
-          </button>
+        <div className="flex items-center gap-2">
+          {/* Quick Filter Selector */}
+          <div className="flex items-center gap-1 text-[11px]">
+            <button
+              type="button"
+              onClick={() => setFilter("all")}
+              className={`rounded-lg px-2 py-1 transition-colors ${
+                filter === "all"
+                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold"
+                  : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+              }`}
+            >
+              Tất cả
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilter("unanswered")}
+              className={`rounded-lg px-2 py-1 transition-colors ${
+                filter === "unanswered"
+                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold"
+                  : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+              }`}
+            >
+              Chưa làm
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilter("flagged")}
+              className={`rounded-lg px-2 py-1 transition-colors ${
+                filter === "flagged"
+                  ? "bg-amber-500 text-white font-semibold"
+                  : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+              }`}
+            >
+              Gắn cờ
+            </button>
+          </div>
+
+          {/* Close button if rendered in drawer */}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1 rounded-lg text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 ml-1"
+              title="Đóng danh sách"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -101,7 +126,7 @@ export function QuestionNavigator({
             <button
               key={idx}
               type="button"
-              onClick={() => onSelectIndex(idx)}
+              onClick={() => handleSelectQuestion(idx)}
               className={`relative flex h-10 w-full items-center justify-center rounded-xl text-xs font-semibold transition-all duration-150 active:scale-90 cursor-pointer ${bgClass}`}
               title={`Câu ${idx + 1}${answered ? " - Đã làm" : ""}${flagged ? " - Gắn cờ" : ""}`}
             >

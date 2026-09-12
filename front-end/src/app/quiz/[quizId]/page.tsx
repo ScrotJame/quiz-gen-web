@@ -3,7 +3,7 @@
 import React, { use, useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, AlertCircle, Play } from "lucide-react";
+import { Loader2, AlertCircle, Play, ArrowLeft, ArrowRight, ListOrdered, CheckCircle2 } from "lucide-react";
 import { QuizHeader } from "../../../components/quiz/QuizHeader";
 import { ProgressBar } from "../../../components/quiz/ProgressBar";
 import { QuestionCard } from "../../../components/quiz/QuestionCard";
@@ -51,7 +51,28 @@ export default function QuizTakingPage({ params }: PageProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<AttemptResult | null>(null);
 
+  // Mobile drawer & swipe gesture state
+  const [isNavigatorDrawerOpen, setIsNavigatorDrawerOpen] = useState(false);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX === null) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const diff = touchStartX - touchEndX;
+    // Swipe horizontal threshold 60px
+    if (diff > 60) {
+      handleNext();
+    } else if (diff < -60) {
+      handlePrev();
+    }
+    setTouchStartX(null);
+  };
 
   // 1. Tải đề thi và khởi tạo lượt thi
   useEffect(() => {
@@ -441,8 +462,12 @@ export default function QuizTakingPage({ params }: PageProps) {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
-            {/* Left/Center: Question Card */}
-            <div className="lg:col-span-8 space-y-4">
+            {/* Left/Center: Question Card with touch gestures */}
+            <div
+              className="lg:col-span-8 space-y-4 touch-pan-y"
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+            >
               {currentQuestion ? (
                 <QuestionCard
                   question={currentQuestion}
@@ -493,8 +518,8 @@ export default function QuizTakingPage({ params }: PageProps) {
               </div>
             </div>
 
-            {/* Right: Question Navigator */}
-            <div className="lg:col-span-4 sticky top-24">
+            {/* Right: Question Navigator (Desktop only) */}
+            <div className="hidden lg:block lg:col-span-4 sticky top-24">
               <QuestionNavigator
                 totalQuestions={totalQuestions}
                 currentIndex={currentIndex}
@@ -512,6 +537,88 @@ export default function QuizTakingPage({ params }: PageProps) {
           </div>
         )}
       </main>
+
+      {/* Mobile Sticky Bottom Action Bar (< lg) */}
+      {!isPaused && (
+        <div className="sticky bottom-0 z-30 lg:hidden w-full border-t border-zinc-200/90 bg-white/95 backdrop-blur-md px-3 py-2 shadow-lg dark:border-zinc-800/90 dark:bg-zinc-950/95 pb-safe">
+          <div className="flex items-center justify-between gap-2">
+            {/* Prev button */}
+            <button
+              type="button"
+              onClick={handlePrev}
+              disabled={currentIndex === 0}
+              className="inline-flex min-h-[42px] items-center gap-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 shadow-xs hover:bg-zinc-50 disabled:opacity-40 disabled:pointer-events-none dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 active:scale-95 shrink-0"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Trước</span>
+            </button>
+
+            {/* Trigger Bottom Sheet to pick question */}
+            <button
+              type="button"
+              onClick={() => setIsNavigatorDrawerOpen(true)}
+              className="inline-flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/80 px-2.5 py-2 text-xs font-bold text-indigo-700 shadow-xs hover:bg-indigo-100/80 dark:border-indigo-900/60 dark:bg-indigo-950/60 dark:text-indigo-300 active:scale-95"
+            >
+              <ListOrdered className="h-4 w-4 shrink-0" />
+              <span>Câu {currentIndex + 1}/{totalQuestions}</span>
+              <span className="text-[10px] font-normal text-indigo-500 dark:text-indigo-400">
+                ({answeredCount} đã làm)
+              </span>
+            </button>
+
+            {/* Next or Submit Button */}
+            {currentIndex < totalQuestions - 1 ? (
+              <button
+                type="button"
+                onClick={handleNext}
+                className="inline-flex min-h-[42px] items-center gap-1 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-indigo-600/20 hover:bg-indigo-500 active:scale-95 shrink-0"
+              >
+                <span>Sau</span>
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsSubmitModalOpen(true)}
+                className="inline-flex min-h-[42px] items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-3.5 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 active:scale-95 shrink-0"
+              >
+                <span>Nộp bài</span>
+                <CheckCircle2 className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Question Navigator Bottom Sheet Drawer */}
+      {isNavigatorDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end lg:hidden bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div
+            className="flex-1"
+            onClick={() => setIsNavigatorDrawerOpen(false)}
+          />
+          <div className="rounded-t-3xl border-t border-zinc-200 bg-white p-4 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 max-h-[85vh] overflow-y-auto pb-safe animate-in slide-in-from-bottom duration-300">
+            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-zinc-300 dark:bg-zinc-700" />
+            <QuestionNavigator
+              totalQuestions={totalQuestions}
+              currentIndex={currentIndex}
+              onSelectIndex={(idx) => {
+                setCurrentIndex(idx);
+                setIsNavigatorDrawerOpen(false);
+              }}
+              isAnswered={(idx) => {
+                const q = quiz.questions[idx];
+                return q ? (answers[q.id] || []).length > 0 : false;
+              }}
+              isFlagged={(idx) => {
+                const q = quiz.questions[idx];
+                return q ? flaggedIds.includes(q.id) : false;
+              }}
+              onClose={() => setIsNavigatorDrawerOpen(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* 4. Submit Confirmation Modal */}
       <SubmitConfirmModal

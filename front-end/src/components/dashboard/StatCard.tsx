@@ -74,25 +74,25 @@ export function StatCard({
 
   return (
     <div
-      className={`group relative overflow-hidden rounded-2xl border ${styles.border} bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${styles.glow} dark:bg-zinc-900`}
+      className={`group relative overflow-hidden rounded-2xl border ${styles.border} bg-white p-3.5 sm:p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${styles.glow} dark:bg-zinc-900`}
     >
       {/* Subtle background glow circle */}
       <div
         className={`absolute -right-6 -top-6 h-28 w-28 rounded-full opacity-15 blur-2xl transition-opacity duration-300 group-hover:opacity-30 ${styles.progressBg}`}
       />
 
-      <div className="relative flex items-start justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+      <div className="relative flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 truncate">
             {title}
           </p>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-3xl sm:text-4xl font-extrabold tracking-tight text-zinc-900 dark:text-white">
+          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-baseline gap-1 sm:gap-2">
+            <span className="text-xl sm:text-4xl font-extrabold tracking-tight text-zinc-900 dark:text-white">
               {value}
             </span>
             {badgeText && (
               <span
-                className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ${styles.bgLight} ${styles.text}`}
+                className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] sm:text-xs font-semibold ${styles.bgLight} ${styles.text}`}
               >
                 {badgeText}
               </span>
@@ -102,9 +102,9 @@ export function StatCard({
 
         {/* Icon container */}
         <div
-          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl shadow-md transition-transform duration-300 group-hover:scale-110 ${styles.iconBg}`}
+          className={`flex h-8 w-8 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-xl shadow-md transition-transform duration-300 group-hover:scale-110 ${styles.iconBg}`}
         >
-          <Icon className="h-6 w-6" />
+          <Icon className="h-4 w-4 sm:h-6 sm:w-6" />
         </div>
       </div>
 

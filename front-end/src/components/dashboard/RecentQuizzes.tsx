@@ -73,12 +73,12 @@ export function RecentQuizzes({
   onSearchChange,
 }: RecentQuizzesProps) {
   return (
-    <div className="rounded-3xl border border-zinc-200/80 bg-white/70 p-6 shadow-sm backdrop-blur-md sm:p-8 dark:border-zinc-800/80 dark:bg-zinc-900/60">
+    <div className="rounded-2xl sm:rounded-3xl border border-zinc-200/80 bg-white/70 p-4.5 sm:p-8 shadow-sm backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-900/60">
       {/* Header section */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400 shrink-0">
               <Layers className="h-5 w-5" />
             </div>
             <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
@@ -88,7 +88,7 @@ export function RecentQuizzes({
               {quizzes.length} đề thi
             </span>
           </div>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="mt-1 text-xs sm:text-sm text-zinc-500 dark:text-zinc-400">
             Các bộ câu hỏi trắc nghiệm vừa được tạo hoặc làm gần đây nhất
           </p>
         </div>
@@ -101,14 +101,14 @@ export function RecentQuizzes({
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Tìm kiếm theo tiêu đề..."
-            className="w-full rounded-xl border border-zinc-200 bg-zinc-50/70 py-2 pl-10 pr-4 text-sm text-zinc-900 placeholder-zinc-400 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 dark:border-zinc-800 dark:bg-zinc-950/60 dark:text-white dark:focus:bg-zinc-900"
+            className="w-full rounded-xl border border-zinc-200 bg-white/90 py-2.5 pl-10 pr-4 text-sm text-zinc-900 placeholder-zinc-400 shadow-xs focus:border-indigo-500 focus:outline-hidden dark:border-zinc-700 dark:bg-zinc-800/90 dark:text-white dark:placeholder-zinc-500"
           />
         </div>
       </div>
 
-      {/* Category Pills Filter */}
+      {/* Category filter pills - smooth horizontal scroll on mobile */}
       {categories.length > 1 && (
-        <div className="mt-6 flex flex-wrap gap-2 overflow-x-auto pb-1">
+        <div className="mt-5 flex flex-nowrap sm:flex-wrap gap-2 overflow-x-auto no-scrollbar pb-1.5 -mx-1 px-1">
           {categories.map((cat) => {
             const isSelected = selectedCategory === cat;
             return (
@@ -116,7 +116,7 @@ export function RecentQuizzes({
                 key={cat}
                 type="button"
                 onClick={() => onSelectCategory(cat)}
-                className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${
+                className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${
                   isSelected
                     ? "bg-indigo-600 text-white shadow-xs shadow-indigo-600/30"
                     : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200/80 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700/80"

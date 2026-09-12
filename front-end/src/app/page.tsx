@@ -106,51 +106,51 @@ export default function DashboardPage() {
       <Navbar />
 
       {/* Main Container */}
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8 space-y-8">
+      <main className="mx-auto w-full max-w-7xl flex-1 px-3.5 py-4 sm:px-6 sm:py-8 lg:px-8 space-y-6 sm:space-y-8">
         {/* ========================================================================= */}
         {/* 1. HERO SECTION & PRIMARY "CREATE QUIZ" BUTTON                           */}
         {/* ========================================================================= */}
-        <section className="relative overflow-hidden rounded-3xl border border-indigo-100/80 bg-gradient-to-br from-indigo-900 via-indigo-950 to-zinc-950 p-6 sm:p-10 text-white shadow-xl shadow-indigo-950/20 dark:border-indigo-900/40">
+        <section className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-indigo-100/80 bg-gradient-to-br from-indigo-900 via-indigo-950 to-zinc-950 p-5 sm:p-10 text-white shadow-xl shadow-indigo-950/20 dark:border-indigo-900/40">
           {/* Ambient decorative glow elements */}
           <div className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full bg-indigo-500/25 blur-3xl" />
           <div className="pointer-events-none absolute -left-20 -bottom-20 h-72 w-72 rounded-full bg-purple-500/20 blur-3xl" />
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:16px_16px]" />
 
-          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8">
-            <div className="max-w-2xl space-y-3">
-              <div className="inline-flex items-center gap-2 rounded-full bg-indigo-500/20 px-3.5 py-1 text-xs font-semibold text-indigo-300 backdrop-blur-md border border-indigo-400/20">
+          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 sm:gap-8">
+            <div className="max-w-2xl space-y-2.5 sm:space-y-3">
+              <div className="inline-flex items-center gap-1.5 sm:gap-2 rounded-full bg-indigo-500/20 px-3 py-1 text-[11px] sm:text-xs font-semibold text-indigo-300 backdrop-blur-md border border-indigo-400/20">
                 <Sparkles className="h-3.5 w-3.5 text-indigo-400 animate-pulse" />
                 <span>Công nghệ OCR tiếng Việt & AI Mistral thế hệ mới</span>
               </div>
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight sm:leading-tight">
+              <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight">
                 Tạo Đề Thi Trắc Nghiệm{" "}
                 <span className="bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300 bg-clip-text text-transparent">
                   Từ Ảnh Chụp
                 </span>
               </h1>
-              <p className="text-sm sm:text-base text-zinc-300/90 leading-relaxed">
+              <p className="text-xs sm:text-base text-zinc-300/90 leading-relaxed">
                 Tải ảnh sách giáo khoa, slide bài giảng hoặc tài liệu để trích xuất
                 văn bản tự động và sinh bộ câu hỏi trắc nghiệm có đáp án & lời giải chi tiết.
               </p>
             </div>
 
             {/* Primary Action Button: CREATE QUIZ -> /create/ocr */}
-            <div className="flex flex-col sm:flex-row lg:flex-col shrink-0 gap-3">
+            <div className="flex flex-col sm:flex-row lg:flex-col shrink-0 gap-3 w-full sm:w-auto">
               <Link
                 id="btn-create-quiz-primary"
                 href="/create/ocr"
-                className="group relative inline-flex items-center justify-center gap-3 overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 px-8 py-4 text-base sm:text-lg font-bold text-white shadow-xl shadow-indigo-600/40 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-indigo-500/50 active:scale-95 cursor-pointer"
+                className="group relative inline-flex w-full sm:w-auto items-center justify-center gap-2.5 sm:gap-3 overflow-hidden rounded-xl sm:rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 px-6 py-3.5 sm:px-8 sm:py-4 text-sm sm:text-lg font-bold text-white shadow-xl shadow-indigo-600/40 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-indigo-500/50 active:scale-95 cursor-pointer min-h-[48px]"
               >
                 <div className="absolute inset-0 bg-white/20 opacity-0 transition-opacity group-hover:opacity-100" />
-                <Sparkles className="h-5 w-5 transition-transform duration-300 group-hover:rotate-12" />
+                <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-300 group-hover:rotate-12" />
                 <span>Tạo Đề Thi — Quét Ảnh OCR</span>
-                <ArrowRight className="h-5 w-5 transition-transform duration-300 group-hover:translate-x-1" />
+                <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-300 group-hover:translate-x-1" />
               </Link>
 
-              <div className="flex items-center justify-center gap-3 text-xs text-zinc-400">
+              <div className="flex items-center justify-center gap-3 text-[11px] sm:text-xs text-zinc-400">
                 <span className="flex items-center gap-1">
                   <FileImage className="h-3.5 w-3.5 text-indigo-400" />
-                  Hỗ trợ PNG/JPG/WEBP
+                  PNG/JPG/WEBP
                 </span>
                 <span>•</span>
                 <span className="flex items-center gap-1">
@@ -167,7 +167,7 @@ export default function DashboardPage() {
         {/* ========================================================================= */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+            <h2 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
               <span>Chỉ số tổng quan</span>
               {loadingStats && (
                 <span className="inline-block h-2 w-2 rounded-full bg-indigo-500 animate-ping" />
@@ -184,7 +184,7 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
             {/* Stat 1: Tổng số quiz đã tạo */}
             <StatCard
               title="Tổng số quiz đã tạo"
