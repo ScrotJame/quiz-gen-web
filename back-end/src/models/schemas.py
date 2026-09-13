@@ -209,3 +209,71 @@ class CleanTextRequest(CamelModel):
 
 class CleanTextResponse(CamelModel):
     cleaned_text: str
+
+
+# ---------------------------------------------------------------- bank (Ngân hàng câu hỏi)
+
+
+class BankOptionCreate(CamelModel):
+    option_text: str
+    is_correct: bool = False
+    order_num: int = 0
+
+
+class BankOptionSchema(CamelModel):
+    id: uuid.UUID
+    question_id: uuid.UUID
+    option_text: str
+    is_correct: bool
+    order_num: int
+
+
+class BankQuestionCreate(CamelModel):
+    question_text: str
+    question_type: QuestionType = QuestionType.SINGLE_CHOICE
+    category: str = "Chung"
+    difficulty: str = "medium"
+    explanation: str | None = None
+    source_note: str | None = None
+    options: list[BankOptionCreate] = Field(default_factory=list)
+
+
+class BankQuestionBatchCreate(CamelModel):
+    """Body cho POST /api/v1/bank/questions/batch — tối đa 100 câu mỗi lần."""
+
+    questions: list[BankQuestionCreate] = Field(default_factory=list, min_length=1, max_length=100)
+
+
+class BankQuestionUpdate(CamelModel):
+    """Cập nhật một phần câu hỏi trong ngân hàng (PATCH semantics qua PUT)."""
+
+    question_text: str | None = None
+    question_type: QuestionType | None = None
+    category: str | None = None
+    difficulty: str | None = None
+    explanation: str | None = None
+    source_note: str | None = None
+
+
+class BankQuestionSchema(CamelModel):
+    id: uuid.UUID
+    question_text: str
+    question_type: QuestionType
+    category: str
+    difficulty: str
+    explanation: str | None = None
+    source_note: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    options: list[BankOptionSchema] = Field(default_factory=list)
+
+
+class BankQuestionListResponse(CamelModel):
+    items: list[BankQuestionSchema]
+    total: int
+    page: int
+    limit: int
+
+
+class BankCategoriesResponse(CamelModel):
+    categories: list[str]

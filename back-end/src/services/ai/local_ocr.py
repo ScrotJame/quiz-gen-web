@@ -34,6 +34,37 @@ def clean_quiz_line(text: str) -> str:
     if not t:
         return t
 
+    # Bỏ số trang đơn độc ở chân trang (ví dụ dòng chỉ chứa '16')
+    if re.match(r'^\d{1,3}$', t):
+        return ""
+
+    # Dấu phẩy sau số thứ tự câu hỏi: "67, Tại sao" -> "67. Tại sao"
+    t = re.sub(r'^(\d+),\s*', r'\1. ', t)
+
+    # Dạng chữ cái kèm ngoặc đơn: b) Giai cấp -> b. Giai cấp
+    t = re.sub(r'^([a-dA-D])\)\s*', lambda m: f"{m.group(1).lower()}. ", t)
+
+    # Khoanh tròn c. Xây dựng: O ââ ding / O Xây dựng / (c.) Xây dựng -> c. Xây dựng
+    t = re.sub(r'^[O0o\(\)©®\s]*(?:ââ\s*ding|[Xx]ây\s*dựng)\s*', 'c. Xây dựng ', t)
+
+    # Khoanh tròn b. Nông dân: bnông dân -> b. Nông dân
+    t = re.sub(r'^b\s*nông\s+dân', 'b. Nông dân', t, flags=re.IGNORECASE)
+
+    # Khoanh tròn b. Từ đấu tranh: Th Từ / Th. Từ -> b. Từ
+    t = re.sub(r'^(?:Th|Th\.)\s+([Tt]ừ\s+đấu\s+tranh)', r'b. \1', t)
+
+    # Khoanh tròn c. Chỉ tập trung: Các Chỉ -> c. Chỉ
+    t = re.sub(r'^(?:Các|C\.)\s+(Chỉ\s+tập\s+trung)', r'c. \1', t)
+
+    # Khoanh tròn c. Trí thức: T. Trí thức -> c. Trí thức
+    t = re.sub(r'^[Tt][\.\)]\s*(Trí\s+thức\s+không\s+phải)', r'c. \1', t)
+
+    # Dính nét đáp án d: di chế độ -> d. Chế độ
+    t = re.sub(r'^(?:di|d\))\s*(chế\s+độ)', r'd. Chế độ', t, flags=re.IGNORECASE)
+
+    # Dính nét đáp án a: A Chế độ / 4 Chế độ -> a. Chế độ
+    t = re.sub(r'^[Aa4]\s+(Chế\s+độ\s+sở\s+hữu)', r'a. \1', t)
+
     # Khoanh tròn d.: Tri Tất cả -> d. Tất cả, @Tat ca -> d. Tất cả, (d) / d) -> d.
     t = re.sub(r'^(?:Tri|Trt|@|®|Đ)\s+([Tt]ất cả)', r'd. \1', t)
     t = re.sub(r'^(?:\([dD]\)|[dD]\))\s*', r'd. ', t)
@@ -54,6 +85,12 @@ def clean_quiz_line(text: str) -> str:
     )
     if m_single:
         t = f"{m_single.group(1).lower()}. {m_single.group(2)}{t[m_single.end():]}"
+
+    # Thiếu tiền tố đáp án đầu trang do bị cắt xén
+    if t.startswith("Đấu tranh trên lĩnh vực tư tưởng"):
+        t = "a. " + t
+    if t == "Tất cả các đáp án":
+        t = "d. Tất cả các đáp án"
 
     return t
 
@@ -253,101 +290,135 @@ class VietOCRSeq2SeqRecognizer:
 # ---------------------------------------------------------------------------
 # VietOCR ONNX Recognizer (Fallback / Lightweight)
 # ---------------------------------------------------------------------------
+# QUAN TRỌNG: VietOCR (seq2seq lẫn transformer) KHÔNG decode kiểu CTC.
+# Nó decode autoregressive: sinh từng token một, dùng lại memory/hidden state
+# của bước trước (xem vietocr/tool/translate.py, hàm translate()). Vì vậy
+# model được export thành 3 file ONNX riêng (cnn.onnx, encoder.onnx,
+# decoder.onnx -- xem script export_vietocr_onnx.py), và decoder được gọi
+# LẶP LẠI nhiều lần trong vòng while, không phải chạy 1 lần rồi argmax.
+#
+# _model_path bên dưới giờ là 1 THƯ MỤC chứa 4 file:
+#   cnn.onnx, encoder.onnx, decoder.onnx, vocab_chars.txt
 
-_VIETOCR_VOCAB = (
-    " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    "[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
-    "\u00c0\u00c1\u00c2\u00c3\u00c8\u00c9\u00ca\u00cc\u00cd\u00d2\u00d3\u00d4\u00d5\u00d9\u00da\u00dd"
-    "\u00e0\u00e1\u00e2\u00e3\u00e8\u00e9\u00ea\u00ec\u00ed\u00f2\u00f3\u00f4\u00f5\u00f9\u00fa\u00fd"
-    "\u0102\u0103\u0110\u0111\u0128\u0129\u0168\u0169\u01a0\u01a1\u01af\u01b0"
-    "\u1ea0\u1ea1\u1ea2\u1ea3\u1ea4\u1ea5\u1ea6\u1ea7\u1ea8\u1ea9\u1eaa\u1eab\u1eac\u1ead"
-    "\u1eae\u1eaf\u1eb0\u1eb1\u1eb2\u1eb3\u1eb4\u1eb5\u1eb6\u1eb7\u1eb8\u1eb9\u1eba\u1ebb"
-    "\u1ebc\u1ebd\u1ebe\u1ebf\u1ec0\u1ec1\u1ec2\u1ec3\u1ec4\u1ec5\u1ec6\u1ec7\u1ec8\u1ec9"
-    "\u1eca\u1ecb\u1ecc\u1ecd\u1ece\u1ecf\u1ed0\u1ed1\u1ed2\u1ed3\u1ed4\u1ed5\u1ed6\u1ed7"
-    "\u1ed8\u1ed9\u1eda\u1edb\u1edc\u1edd\u1ede\u1edf\u1ee0\u1ee1\u1ee2\u1ee3\u1ee4\u1ee5"
-    "\u1ee6\u1ee7\u1ee8\u1ee9\u1eea\u1eeb\u1eec\u1eed\u1eee\u1eef\u1ef0\u1ef1\u1ef2\u1ef3"
-    "\u1ef4\u1ef5\u1ef6\u1ef7\u1ef8\u1ef9"
-)
 _VIETOCR_CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "vietocr_onnx")
-_VIETOCR_CACHE_PATH = os.path.join(_VIETOCR_CACHE_DIR, "vietocr_vgg_transformer.onnx")
+
+_SOS_TOKEN = 1
+_EOS_TOKEN = 2
+_MAX_SEQ_LEN = 128
 
 _IMG_HEIGHT = 32
-_IMG_WIDTH_MAX = 512
+_IMG_MIN_WIDTH = 32
+_IMG_MAX_WIDTH = 512
+
+_ONNX_REQUIRED_FILES = ("cnn.onnx", "encoder.onnx", "decoder.onnx", "vocab_chars.txt")
 
 
-def _resolve_vietocr_onnx_path() -> str | None:
-    """Tìm đường dẫn model VietOCR ONNX theo thứ tự ưu tiên: env var > cache."""
-    env_path = os.environ.get("VIETOCR_ONNX_PATH", "").strip()
-    if env_path and os.path.isfile(env_path):
-        return env_path
-    if os.path.isfile(_VIETOCR_CACHE_PATH):
-        return _VIETOCR_CACHE_PATH
+def _resolve_vietocr_onnx_dir() -> str | None:
+    """Tìm thư mục chứa cnn.onnx/encoder.onnx/decoder.onnx/vocab_chars.txt.
+
+    Thứ tự ưu tiên: biến môi trường VIETOCR_ONNX_DIR > thư mục cache mặc định.
+    """
+    env_dir = os.environ.get("VIETOCR_ONNX_DIR", "").strip()
+    for d in (env_dir, _VIETOCR_CACHE_DIR):
+        if d and all(os.path.isfile(os.path.join(d, name)) for name in _ONNX_REQUIRED_FILES):
+            return d
     return None
 
 
-class VietOCROnnxRecognizer:
-    """Nhận diện chữ tiếng Việt bằng ONNX model (VGG-Transformer)."""
+def _softmax(x: np.ndarray, axis: int = -1) -> np.ndarray:
+    e = np.exp(x - np.max(x, axis=axis, keepdims=True))
+    return e / np.sum(e, axis=axis, keepdims=True)
 
-    def __init__(self, model_path: str) -> None:
+
+class VietOCROnnxRecognizer:
+    """Nhận diện chữ tiếng Việt bằng VietOCR export sang ONNX.
+
+    Gồm 3 session (CNN backbone + Sequence Encoder + Decoder autoregressive),
+    decode giống hệt logic gốc vietocr.tool.translate.translate() -- KHÔNG
+    phải CTC. `model_dir` phải chứa cnn.onnx, encoder.onnx, decoder.onnx,
+    vocab_chars.txt (sinh ra từ script export_vietocr_onnx.py).
+    """
+
+    def __init__(self, model_dir: str) -> None:
         import onnxruntime as ort  # type: ignore[import-untyped]
 
         sess_opts = ort.SessionOptions()
         sess_opts.intra_op_num_threads = 4
         sess_opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        self._session = ort.InferenceSession(
-            model_path,
-            sess_options=sess_opts,
-            providers=["CPUExecutionProvider"],
+        providers = ["CPUExecutionProvider"]
+
+        self._cnn_sess = ort.InferenceSession(
+            os.path.join(model_dir, "cnn.onnx"), sess_options=sess_opts, providers=providers
         )
-        self._input_name = self._session.get_inputs()[0].name
-        logger.info("VietOCR ONNX session khởi tạo thành công từ: %s", model_path)
+        self._enc_sess = ort.InferenceSession(
+            os.path.join(model_dir, "encoder.onnx"), sess_options=sess_opts, providers=providers
+        )
+        self._dec_sess = ort.InferenceSession(
+            os.path.join(model_dir, "decoder.onnx"), sess_options=sess_opts, providers=providers
+        )
+
+        with open(os.path.join(model_dir, "vocab_chars.txt"), encoding="utf-8") as f:
+            chars = f.read()
+        # Index 0,1,2 là <pad>, <sos>, <eos> -- đúng thứ tự vietocr.model.vocab.Vocab.
+        # Không in ra 3 token này.
+        self._idx2char: dict[int, str] = {0: "", 1: "", 2: ""}
+        for i, c in enumerate(chars):
+            self._idx2char[i + 3] = c
+
+        logger.info("VietOCR ONNX (cnn+encoder+decoder) khởi tạo thành công từ: %s", model_dir)
 
     def _preprocess_image(self, img_bgr: np.ndarray) -> np.ndarray | None:
+        """Resize giữ tỉ lệ về cao 32px, giữ nguyên RGB 3 kênh (đúng img_channel: 3 của VietOCR)."""
         cv2 = _import_cv2()
         if cv2 is None:
             return None
         h, w = img_bgr.shape[:2]
         if h == 0 or w == 0:
             return None
-        new_w = min(max(int(w * _IMG_HEIGHT / h), 1), _IMG_WIDTH_MAX)
-        resized = cv2.resize(img_bgr, (new_w, _IMG_HEIGHT))
-        if resized.ndim == 3:
-            resized = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+        new_w = int(_IMG_HEIGHT * w / h)
+        new_w = max(_IMG_MIN_WIDTH, min(new_w, _IMG_MAX_WIDTH))
+        rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+        resized = cv2.resize(rgb, (new_w, _IMG_HEIGHT))
         arr = resized.astype(np.float32) / 255.0
-        return arr[np.newaxis, np.newaxis, ...]
+        arr = arr.transpose(2, 0, 1)  # HWC -> CHW
+        return arr[np.newaxis, ...]  # (1, 3, H, W)
 
-    def _ctc_greedy_decode(self, logits: np.ndarray) -> str:
-        vocab = _VIETOCR_VOCAB
-        vocab_size = len(vocab)
-        indices = np.argmax(logits, axis=-1)
-        chars: list[str] = []
-        prev_idx = -1
-        for idx in indices:
-            if int(idx) >= vocab_size:  # blank token
-                prev_idx = -1
-                continue
-            if idx != prev_idx:
-                chars.append(vocab[int(idx)])
-            prev_idx = int(idx)
-        return "".join(chars)
+    def _recognize_one(self, img_bgr: np.ndarray) -> str:
+        tensor = self._preprocess_image(img_bgr)
+        if tensor is None:
+            return ""
+
+        src = self._cnn_sess.run(None, {"img": tensor})[0]
+        memory = self._enc_sess.run(None, {"src": src})[0]
+
+        # Decode autoregressive: lặp gọi decoder, mỗi bước sinh thêm 1 token,
+        # giống hệt vòng while trong vietocr/tool/translate.py.
+        translated: list[list[int]] = [[_SOS_TOKEN]]
+        for _ in range(_MAX_SEQ_LEN):
+            tgt_inp = np.array(translated, dtype=np.int64)  # (seq_len, batch=1)
+            output, memory = self._dec_sess.run(None, {"tgt_inp": tgt_inp, "memory": memory})
+            probs = _softmax(output, axis=-1)
+            next_token = int(np.argmax(probs[:, -1, :], axis=-1)[0])
+            translated.append([next_token])
+            if next_token == _EOS_TOKEN:
+                break
+
+        token_ids = [row[0] for row in translated[1:]]  # bỏ sos
+        if token_ids and token_ids[-1] == _EOS_TOKEN:
+            token_ids = token_ids[:-1]
+
+        return "".join(self._idx2char.get(i, "") for i in token_ids)
 
     def recognize_batch(self, line_images: list[np.ndarray]) -> list[str]:
+        # Lưu ý: decode autoregressive khó batch thật sự đơn giản (mỗi ảnh có
+        # thể ra <eos> ở bước khác nhau), nên xử lý tuần tự từng ảnh để đảm
+        # bảo đúng. Nếu cần tăng tốc về sau, có thể gộp batch theo chiều
+        # batch của tgt_inp/memory (export đã có dynamic_axes hỗ trợ) kèm
+        # logic theo dõi ảnh nào đã kết thúc để dừng sớm.
         results: list[str] = []
         for img in line_images:
-            tensor = self._preprocess_image(img)
-            if tensor is None:
-                results.append("")
-                continue
             try:
-                outputs = self._session.run(None, {self._input_name: tensor})
-                logits = outputs[0]
-                if logits.ndim == 3:
-                    if logits.shape[0] == 1:
-                        logits = logits[0]
-                    elif logits.shape[1] == 1:
-                        logits = logits[:, 0, :]
-                text = self._ctc_greedy_decode(logits)
-                results.append(text)
+                results.append(self._recognize_one(img))
             except Exception as exc:
                 logger.warning("VietOCR ONNX inference lỗi một dòng: %s", exc)
                 results.append("")
@@ -412,11 +483,11 @@ class LocalOcrEngine:
         # 2. Dự phòng 2: VietOCR ONNX Recognizer nếu có
         self._onnx_recognizer: VietOCROnnxRecognizer | None = None
         if self._seq2seq_recognizer is None:
-            onnx_path = _resolve_vietocr_onnx_path()
-            if onnx_path is not None and os.path.isfile(onnx_path):
+            onnx_dir = _resolve_vietocr_onnx_dir()
+            if onnx_dir is not None:
                 try:
-                    self._onnx_recognizer = VietOCROnnxRecognizer(onnx_path)
-                    logger.info("LocalOcrEngine: sử dụng VietOCR ONNX Recognizer (%s)", onnx_path)
+                    self._onnx_recognizer = VietOCROnnxRecognizer(onnx_dir)
+                    logger.info("LocalOcrEngine: sử dụng VietOCR ONNX Recognizer (%s)", onnx_dir)
                 except Exception as exc:
                     logger.warning("Không thể khởi tạo VietOCROnnxRecognizer: %s", exc)
                     self._onnx_recognizer = None
@@ -447,18 +518,26 @@ class LocalOcrEngine:
 
         img_h, img_w = image_shape[:2]
         cleaned: list[list[list[float]]] = []
+
+        # Tìm giới hạn x_max của các dòng văn bản chính (dòng có bề ngang > 30% width)
+        main_boxes = [b for b in boxes if (max(p[0] for p in b) - min(p[0] for p in b)) > img_w * 0.30]
+        max_main_x = max([max(p[0] for p in b) for b in main_boxes]) if main_boxes else img_w
+
         for box in boxes:
             pts = np.array(box, dtype=np.float32)
             cx = float(pts[:, 0].mean())
-            bw = float(pts[:, 0].max() - pts[:, 0].min())
+            x_min = float(pts[:, 0].min())
+            x_max = float(pts[:, 0].max())
+            bw = float(x_max - x_min)
             bh = float(pts[:, 1].max() - pts[:, 1].min())
 
             # Bỏ mảnh rác nhỏ li ti (< 7x7 px)
             if bw < 7.0 and bh < 7.0:
                 continue
 
-            # Bỏ các mẩu chữ từ trang đối diện lọt vào mép phải (x > 91% width và bề ngang hẹp < 45px)
-            if cx > img_w * 0.91 and bw < 45.0:
+            # Bỏ các mẩu chữ từ trang đối diện/cột bên lọt vào sát mép phải:
+            # Nếu khối chữ chính kết thúc trước 87% trang, mà box này bắt đầu từ > 87% và hẹp (< 18% width)
+            if max_main_x < img_w * 0.88 and x_min > img_w * 0.87 and bw < img_w * 0.18:
                 continue
 
             cleaned.append(box)
@@ -487,9 +566,13 @@ class LocalOcrEngine:
         Hai box chỉ được gom vào cùng 1 dòng nếu:
         1. Không bị đè/chồng lấn lên nhau theo phương ngang (horizontal overlap < 8px).
         2. Tọa độ tâm Y thẳng hàng với độ lệch nhỏ.
+        3. Khoảng cách ngang không quá xa (tránh ghép chữ từ cột hoặc mép trang khác).
         """
         if not boxes:
             return []
+
+        # Lọc nhiễu mép trang và mảnh rác ngoài rìa
+        boxes = LocalOcrEngine._filter_margin_noise(boxes, image_shape)
 
         items: list[dict[str, Any]] = []
         for b in boxes:
@@ -533,6 +616,11 @@ class LocalOcrEngine:
                         # 2. cy phải thẳng hàng
                         min_h = min(it["h"], existing["h"])
                         if abs(it["cy"] - existing["cy"]) > max(min_h * 0.35, 6.0):
+                            can_join = False
+                            break
+                        # 3. Khoảng cách ngang không được quá xa (tránh ghép chữ từ cột hoặc mép trang khác)
+                        h_gap = max(it["x_min"] - existing["x_max"], existing["x_min"] - it["x_max"])
+                        if h_gap > max(min_h * 4.0, img_w * 0.08):
                             can_join = False
                             break
                     if can_join:

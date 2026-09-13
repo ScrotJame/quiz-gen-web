@@ -2,14 +2,14 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import {
-  StudioHeader,
-} from "../../../components/studio/StudioHeader";
+import { StudioHeader } from "../../../components/studio/StudioHeader";
 import { Filmstrip } from "../../../components/studio/Filmstrip";
 import { SplitScreen } from "../../../components/studio/SplitScreen";
 import { MergeCleanPanel } from "../../../components/studio/MergeCleanPanel";
+import { BankReviewPanel } from "../../../components/studio/BankReviewPanel";
 import { QuizEditor } from "../../../components/studio/QuizEditor";
 import {
+  BankQuestionCreate,
   Difficulty,
   OcrRetryOptions,
   QuestionEdit,
@@ -17,6 +17,7 @@ import {
   StudioPageItem,
 } from "../../../lib/types";
 import {
+  batchCreateBankQuestions,
   cleanText,
   createQuiz,
   generateQuizFromText,
@@ -24,10 +25,10 @@ import {
 } from "../../../lib/api-client";
 import { AlertCircle, RotateCcw, X } from "lucide-react";
 
-const DRAFT_STORAGE_KEY = "ocr_studio_draft_v1";
+const DRAFT_STORAGE_KEY = "ocr_studio_draft_v2";
 
 interface SavedDraft {
-  step: 1 | 2 | 3;
+  step: 1 | 2 | 3 | 4;
   title: string;
   category: string;
   numQuestions: number;
@@ -36,15 +37,20 @@ interface SavedDraft {
   mergedText: string;
   hasCleaned: boolean;
   pagesText: { id: string; text: string; rotation: number }[];
+  /** Câu hỏi trích xuất từ AI — ở Bước 3 chờ lưu vào Bank */
+  bankQuestions: BankQuestionCreate[];
+  /** Câu hỏi đã được nạp vào đề thi ở Bước 4 */
   questions: QuestionEdit[];
+  /** true nếu đã lưu vào Bank thành công (mở khoá Bước 4) */
+  bankSaved: boolean;
   timestamp: string;
 }
 
 export default function OcrStudioPage() {
   const router = useRouter();
 
-  // Step state (1: Quét, 2: Chuẩn hóa & Hợp nhất, 3: Biên tập)
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  // Step state (1: Quét, 2: Chuẩn hóa & Hợp nhất, 3: Duyệt & Lưu Thư viện, 4: Biên tập đề thi)
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
   // Pages state
   const [pages, setPages] = useState<StudioPageItem[]>([]);
@@ -62,7 +68,12 @@ export default function OcrStudioPage() {
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   const [temperature, setTemperature] = useState<number>(0.3);
 
-  // AI Generation & Editor state
+  // Bước 3: Ngân hàng câu hỏi (chờ duyệt)
+  const [bankQuestions, setBankQuestions] = useState<BankQuestionCreate[]>([]);
+  const [isSavingBank, setIsSavingBank] = useState<boolean>(false);
+  const [bankSaved, setBankSaved] = useState<boolean>(false);
+
+  // Bước 4: Editor
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [questions, setQuestions] = useState<QuestionEdit[]>([]);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -99,7 +110,7 @@ export default function OcrStudioPage() {
 
   // Auto-save draft debounced
   useEffect(() => {
-    if (pages.length === 0 && !mergedText.trim() && questions.length === 0) {
+    if (pages.length === 0 && !mergedText.trim() && questions.length === 0 && bankQuestions.length === 0) {
       return;
     }
 
@@ -119,7 +130,9 @@ export default function OcrStudioPage() {
             text: p.text,
             rotation: p.rotation,
           })),
+          bankQuestions,
           questions,
+          bankSaved,
           timestamp: new Date().toISOString(),
         };
         localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
@@ -131,16 +144,8 @@ export default function OcrStudioPage() {
 
     return () => clearTimeout(timer);
   }, [
-    step,
-    pages,
-    mergedText,
-    hasCleaned,
-    title,
-    category,
-    numQuestions,
-    difficulty,
-    temperature,
-    questions,
+    step, pages, mergedText, hasCleaned, title, category,
+    numQuestions, difficulty, temperature, bankQuestions, questions, bankSaved,
   ]);
 
   // Restore Draft
@@ -152,7 +157,9 @@ export default function OcrStudioPage() {
     setTemperature(draft.temperature ?? 0.3);
     setMergedText(draft.mergedText || "");
     setHasCleaned(draft.hasCleaned || false);
+    setBankQuestions(draft.bankQuestions || []);
     setQuestions(draft.questions || []);
+    setBankSaved(draft.bankSaved || false);
     setStep(draft.step || 1);
     setDraftPrompt(null);
     showToast("Đã khôi phục phiên làm việc trước đó!");
@@ -195,11 +202,7 @@ export default function OcrStudioPage() {
       setPages((prev) =>
         prev.map((p) =>
           p.id === pageItem.id
-            ? {
-                ...p,
-                status: "error",
-                errorMessage: msg,
-              }
+            ? { ...p, status: "error", errorMessage: msg }
             : p
         )
       );
@@ -236,41 +239,25 @@ export default function OcrStudioPage() {
       confidence: 0,
     }));
 
-    setPages((prev) => {
-      const next = [...prev, ...newPages];
-      return next;
-    });
-
-    // Run OCR in parallel for each added page
-    newPages.forEach((item) => {
-      processOcrForPage(item);
-    });
+    setPages((prev) => [...prev, ...newPages]);
+    newPages.forEach((item) => processOcrForPage(item));
   };
 
-  // Rotate page
   const handleRotatePage = (index: number) => {
     setPages((prev) => {
       const next = [...prev];
       if (next[index]) {
-        next[index] = {
-          ...next[index],
-          rotation: (next[index].rotation + 90) % 360,
-        };
+        next[index] = { ...next[index], rotation: (next[index].rotation + 90) % 360 };
       }
       return next;
     });
   };
 
-  // Delete page
   const handleDeletePage = (index: number) => {
-    setPages((prev) => {
-      const next = prev.filter((_, i) => i !== index);
-      return next;
-    });
+    setPages((prev) => prev.filter((_, i) => i !== index));
     setSelectedIndex((prev) => (prev >= index ? Math.max(0, prev - 1) : prev));
   };
 
-  // Move page up / down
   const handleMovePage = (index: number, direction: "up" | "down") => {
     setPages((prev) => {
       const next = [...prev];
@@ -282,37 +269,26 @@ export default function OcrStudioPage() {
     });
     setSelectedIndex((prev) =>
       direction === "up"
-        ? prev === index
-          ? index - 1
-          : prev
-        : prev === index
-        ? index + 1
-        : prev
+        ? prev === index ? index - 1 : prev
+        : prev === index ? index + 1 : prev
     );
   };
 
-  // Retry page OCR
   const handleRetryPage = (index: number, options?: OcrRetryOptions) => {
     const target = pages[index];
-    if (target) {
-      processOcrForPage(target, options);
-    }
+    if (target) processOcrForPage(target, options);
   };
 
-  // Text change for single page
   const handleTextChange = (index: number, newText: string) => {
     setPages((prev) => {
       const next = [...prev];
-      if (next[index]) {
-        next[index] = { ...next[index], text: newText };
-      }
+      if (next[index]) next[index] = { ...next[index], text: newText };
       return next;
     });
   };
 
   // Proceed to Step 2 (Merge & Clean)
   const handleProceedToStep2 = () => {
-    // Merge all page texts in order
     const merged = pages
       .map((p, i) => {
         const header = pages.length > 1 ? `[Trang ${i + 1}]\n` : "";
@@ -323,7 +299,6 @@ export default function OcrStudioPage() {
 
     setMergedText(merged);
     if (!title) {
-      // Auto-extract candidate title from first line
       const firstLine = pages[0]?.text.trim().split("\n")[0] || "";
       if (firstLine && firstLine.length < 80) {
         setTitle(firstLine.replace(/^[0-9.\-–\s]+/, ""));
@@ -344,14 +319,13 @@ export default function OcrStudioPage() {
       setHasCleaned(true);
       showToast("AI đã chuẩn hóa văn bản và nối liền câu liên trang thành công!");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Lỗi khi gọi AI Clean";
-      showToast(msg);
+      showToast(err instanceof Error ? err.message : "Lỗi khi gọi AI Clean");
     } finally {
       setIsCleaning(false);
     }
   };
 
-  // Step 2: Generate Quiz with AI
+  // Step 2 -> Step 3: Generate questions with AI, display on BankReviewPanel
   const handleGenerateQuiz = async () => {
     if (!mergedText.trim()) return;
     setIsGenerating(true);
@@ -363,36 +337,68 @@ export default function OcrStudioPage() {
         difficulty,
         temperature,
         saveImmediately: false,
-        authorName: "OCR Studio + Mistral",
+        authorName: "OCR Studio + AI",
       });
 
       if (res.title) setTitle(res.title);
 
-      // Convert generated questions to editable questions
-      const parsedQuestions: QuestionEdit[] = (res.questions || []).map((q) => ({
-        id: crypto.randomUUID(),
+      // Chuyển sang BankQuestionCreate để hiển thị ở Bước 3
+      const extracted: BankQuestionCreate[] = (res.questions || []).map((q) => ({
         questionText: q.questionText,
         questionType: q.questionType || "single_choice",
-        points: q.points || 10,
+        category,
+        difficulty,
         explanation: q.explanation || "",
-        options: (q.options || []).map((opt) => ({
+        sourceNote: `OCR Studio – ${pages.length} trang ảnh`,
+        options: (q.options || []).map((opt, idx) => ({
           optionText: opt.optionText,
           isCorrect: Boolean(opt.isCorrect),
+          orderNum: idx,
         })),
       }));
 
-      setQuestions(parsedQuestions);
+      setBankQuestions(extracted);
+      setBankSaved(false);
       setStep(3);
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : "Lỗi khi sinh câu hỏi bằng AI";
-      showToast(msg);
+      showToast(err instanceof Error ? err.message : "Lỗi khi sinh câu hỏi bằng AI");
     } finally {
       setIsGenerating(false);
     }
   };
 
-  // Step 3: Save quiz payload
+  // Step 3: Save bank questions and proceed to Step 4
+  const handleSaveToBank = async () => {
+    if (bankQuestions.length === 0) return;
+    setIsSavingBank(true);
+    try {
+      await batchCreateBankQuestions({ questions: bankQuestions });
+      setBankSaved(true);
+
+      // Clone bankQuestions sang QuestionEdit để nạp sẵn vào Bước 4
+      const preloaded: QuestionEdit[] = bankQuestions.map((q) => ({
+        id: crypto.randomUUID(),
+        questionText: q.questionText,
+        questionType: q.questionType || "single_choice",
+        points: 10,
+        explanation: q.explanation || "",
+        options: q.options.map((opt) => ({
+          optionText: opt.optionText,
+          isCorrect: opt.isCorrect,
+        })),
+      }));
+      setQuestions(preloaded);
+
+      showToast(`Đã lưu ${bankQuestions.length} câu hỏi vào Thư viện! Đang chuyển sang Biên tập đề thi...`);
+      setTimeout(() => setStep(4), 800);
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Lỗi khi lưu vào Thư viện câu hỏi");
+    } finally {
+      setIsSavingBank(false);
+    }
+  };
+
+  // Step 4: Build save payload
   const buildSavePayload = (): QuizCreatePayload => {
     return {
       title: title.trim() || "Đề thi trắc nghiệm không tên",
@@ -417,7 +423,6 @@ export default function OcrStudioPage() {
     };
   };
 
-  // Save to Library & return to Dashboard
   const handleSaveToLibrary = async () => {
     if (questions.length === 0) return;
     setIsSaving(true);
@@ -428,13 +433,11 @@ export default function OcrStudioPage() {
       showToast("Đã lưu đề thi vào Thư viện thành công!");
       router.push("/");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Lỗi khi lưu đề thi";
-      showToast(msg);
+      showToast(err instanceof Error ? err.message : "Lỗi khi lưu đề thi");
       setIsSaving(false);
     }
   };
 
-  // Save & Start Attempt immediately
   const handleSaveAndPlay = async () => {
     if (questions.length === 0) return;
     setIsSaving(true);
@@ -445,27 +448,23 @@ export default function OcrStudioPage() {
       showToast("Đã lưu đề thi! Đang chuyển đến phòng thi...");
       router.push(`/quiz/${created.id}`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Lỗi khi lưu đề thi";
-      showToast(msg);
+      showToast(err instanceof Error ? err.message : "Lỗi khi lưu đề thi");
       setIsSaving(false);
     }
   };
 
   // Step navigation permissions
-  const canNavigateToStep = (targetStep: 1 | 2 | 3) => {
+  const canNavigateToStep = (targetStep: 1 | 2 | 3 | 4) => {
     if (targetStep === 1) return true;
     if (targetStep === 2) return pages.length > 0 && pages.some((p) => p.text.trim().length > 0);
-    if (targetStep === 3) return questions.length > 0;
+    if (targetStep === 3) return bankQuestions.length > 0;
+    if (targetStep === 4) return bankSaved && questions.length > 0;
     return false;
   };
 
   const handleBackClick = () => {
-    if (pages.length > 0 || questions.length > 0) {
-      if (
-        window.confirm(
-          "Bạn có chắc muốn thoát khỏi Studio? Bản nháp hiện tại đã được tự động lưu trên máy này."
-        )
-      ) {
+    if (pages.length > 0 || questions.length > 0 || bankQuestions.length > 0) {
+      if (window.confirm("Bạn có chắc muốn thoát khỏi Studio? Bản nháp hiện tại đã được tự động lưu trên máy này.")) {
         router.push("/");
       }
     } else {
@@ -542,7 +541,6 @@ export default function OcrStudioPage() {
       <main className="flex flex-1 flex-col overflow-hidden">
         {step === 1 && (
           <div className="flex flex-1 flex-col md:flex-row overflow-hidden">
-            {/* Filmstrip Left Sidebar */}
             <Filmstrip
               pages={pages}
               selectedIndex={selectedIndex}
@@ -553,8 +551,6 @@ export default function OcrStudioPage() {
               onMovePage={handleMovePage}
               onRetryPage={handleRetryPage}
             />
-
-            {/* Split Screen Center View */}
             <SplitScreen
               pages={pages}
               selectedIndex={selectedIndex}
@@ -593,12 +589,23 @@ export default function OcrStudioPage() {
         )}
 
         {step === 3 && (
+          <BankReviewPanel
+            questions={bankQuestions}
+            onQuestionsChange={setBankQuestions}
+            defaultCategory={category}
+            isSaving={isSavingBank}
+            onSaveToBank={handleSaveToBank}
+            onBackToStep2={() => setStep(2)}
+          />
+        )}
+
+        {step === 4 && (
           <QuizEditor
             questions={questions}
             onQuestionsChange={setQuestions}
             title={title}
             category={category}
-            onBackToStep2={() => setStep(2)}
+            onBackToStep2={() => setStep(3)}
             onSaveToLibrary={handleSaveToLibrary}
             onSaveAndPlay={handleSaveAndPlay}
             isSaving={isSaving}

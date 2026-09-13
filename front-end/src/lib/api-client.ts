@@ -273,4 +273,83 @@ export async function createQuiz(payload: QuizCreatePayload): Promise<QuizDetail
   return await handleResponse<QuizDetail>(res);
 }
 
+// ─── Question Bank API ────────────────────────────────────────────────────────
 
+import type {
+  BankCategoriesResponse,
+  BankListParams,
+  BankQuestionBatchCreate,
+  BankQuestionListResponse,
+  BankQuestionSchema,
+  BankQuestionUpdate,
+} from "./types";
+
+/**
+ * Batch lưu câu hỏi vào Ngân hàng câu hỏi
+ */
+export async function batchCreateBankQuestions(
+  payload: BankQuestionBatchCreate
+): Promise<BankQuestionSchema[]> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/bank/questions/batch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return await handleResponse<BankQuestionSchema[]>(res);
+}
+
+/**
+ * Lấy danh sách câu hỏi trong Ngân hàng (có lọc, tìm kiếm, phân trang)
+ */
+export async function getBankQuestions(
+  params: BankListParams = {}
+): Promise<BankQuestionListResponse> {
+  const query = new URLSearchParams();
+  if (params.category) query.set("category", params.category);
+  if (params.difficulty) query.set("difficulty", params.difficulty);
+  if (params.search?.trim()) query.set("search", params.search.trim());
+  if (params.page) query.set("page", String(params.page));
+  if (params.limit) query.set("limit", String(params.limit));
+
+  const res = await fetch(
+    `${API_BASE_URL}/api/v1/bank/questions?${query.toString()}`,
+    { method: "GET", headers: { "Content-Type": "application/json" }, cache: "no-store" }
+  );
+  return await handleResponse<BankQuestionListResponse>(res);
+}
+
+/**
+ * Lấy danh sách danh mục trong Ngân hàng câu hỏi
+ */
+export async function getBankCategories(): Promise<BankCategoriesResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/bank/categories`, {
+    method: "GET",
+    cache: "no-store",
+  });
+  return await handleResponse<BankCategoriesResponse>(res);
+}
+
+/**
+ * Cập nhật câu hỏi trong Ngân hàng
+ */
+export async function updateBankQuestion(
+  questionId: string,
+  data: BankQuestionUpdate
+): Promise<BankQuestionSchema> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/bank/questions/${questionId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return await handleResponse<BankQuestionSchema>(res);
+}
+
+/**
+ * Xóa câu hỏi khỏi Ngân hàng
+ */
+export async function deleteBankQuestion(questionId: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/bank/questions/${questionId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) await handleResponse<void>(res);
+}

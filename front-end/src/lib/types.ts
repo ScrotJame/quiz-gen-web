@@ -189,3 +189,73 @@ export interface QuizCreatePayload {
   questions: QuestionCreatePayload[];
 }
 
+// ─── Question Bank (Ngân hàng câu hỏi) ───────────────────────────────────────
+
+export interface BankOptionCreate {
+  optionText: string;
+  isCorrect: boolean;
+  orderNum?: number;
+}
+
+export interface BankOptionSchema {
+  id: string;
+  questionId: string;
+  optionText: string;
+  isCorrect: boolean;
+  orderNum: number;
+}
+
+export interface BankQuestionCreate {
+  questionText: string;
+  questionType?: QuestionType;
+  category: string;
+  difficulty?: Difficulty;
+  explanation?: string | null;
+  sourceNote?: string | null;
+  options: BankOptionCreate[];
+}
+
+export interface BankQuestionBatchCreate {
+  questions: BankQuestionCreate[];
+}
+
+export interface BankQuestionUpdate {
+  questionText?: string;
+  questionType?: QuestionType;
+  category?: string;
+  difficulty?: Difficulty;
+  explanation?: string | null;
+  sourceNote?: string | null;
+}
+
+export interface BankQuestionSchema {
+  id: string;
+  questionText: string;
+  questionType: QuestionType;
+  category: string;
+  difficulty: Difficulty;
+  explanation?: string | null;
+  sourceNote?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  options: BankOptionSchema[];
+}
+
+export interface BankQuestionListResponse {
+  items: BankQuestionSchema[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface BankCategoriesResponse {
+  categories: string[];
+}
+
+export interface BankListParams {
+  category?: string;
+  difficulty?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}

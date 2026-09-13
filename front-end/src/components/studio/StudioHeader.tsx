@@ -4,9 +4,9 @@ import React from "react";
 import { ArrowLeft, Check, CheckCircle, Sparkles } from "lucide-react";
 
 interface StudioHeaderProps {
-  currentStep: 1 | 2 | 3;
-  onStepChange?: (step: 1 | 2 | 3) => void;
-  canNavigateToStep?: (step: 1 | 2 | 3) => boolean;
+  currentStep: 1 | 2 | 3 | 4;
+  onStepChange?: (step: 1 | 2 | 3 | 4) => void;
+  canNavigateToStep?: (step: 1 | 2 | 3 | 4) => boolean;
   onBackClick: () => void;
   lastSavedAt?: Date | null;
 }
@@ -19,9 +19,10 @@ export function StudioHeader({
   lastSavedAt,
 }: StudioHeaderProps) {
   const steps = [
-    { num: 1 as const, label: "Quét tài liệu", desc: "Scan & Đối chiếu" },
-    { num: 2 as const, label: "Chuẩn hóa AI", desc: "Clean & Nối trang" },
-    { num: 3 as const, label: "Biên tập đề thi", desc: "Preview & Lưu đề" },
+    { num: 1 as const, label: "Quét tài liệu", desc: "Scan & OCR" },
+    { num: 2 as const, label: "Chuẩn hóa AI", desc: "Clean & Bóc tách" },
+    { num: 3 as const, label: "Duyệt Thư viện", desc: "Review & Lưu kho" },
+    { num: 4 as const, label: "Biên tập đề thi", desc: "Preview & Lưu đề" },
   ];
 
   return (
@@ -55,7 +56,7 @@ export function StudioHeader({
         </div>
 
         {/* Center: Stepper */}
-        <nav className="hidden md:flex items-center gap-2 sm:gap-4" aria-label="Tiến trình Studio">
+        <nav className="hidden md:flex items-center gap-1 sm:gap-2" aria-label="Tiến trình Studio">
           {steps.map((s, idx) => {
             const isCompleted = currentStep > s.num;
             const isCurrent = currentStep === s.num;
@@ -65,7 +66,7 @@ export function StudioHeader({
               <React.Fragment key={s.num}>
                 {idx > 0 && (
                   <div
-                    className={`h-0.5 w-6 sm:w-10 transition-colors ${
+                    className={`h-0.5 w-4 sm:w-6 transition-colors ${
                       currentStep >= s.num
                         ? "bg-indigo-600 dark:bg-indigo-500"
                         : "bg-zinc-200 dark:bg-zinc-800"
@@ -76,7 +77,7 @@ export function StudioHeader({
                   type="button"
                   disabled={!isClickable && !isCurrent}
                   onClick={() => isClickable && onStepChange && onStepChange(s.num)}
-                  className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all ${
+                  className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition-all ${
                     isCurrent
                       ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 ring-1 ring-indigo-500/30"
                       : isCompleted
@@ -95,7 +96,7 @@ export function StudioHeader({
                   >
                     {isCompleted ? <Check className="h-3 w-3 stroke-[3]" /> : s.num}
                   </span>
-                  <div className="text-left">
+                  <div className="text-left hidden lg:block">
                     <div>{s.label}</div>
                   </div>
                 </button>

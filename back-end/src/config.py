@@ -77,10 +77,10 @@ class Settings(BaseSettings):
     vietocr_beamsearch: bool = False
 
     # RapidOCR Detector Tuning (chống gộp nhầm dòng & chống bỏ sót chữ)
-    rapidocr_unclip_ratio: float = 1.45
-    rapidocr_box_thresh: float = 0.42
+    rapidocr_unclip_ratio: float = 1.70
+    rapidocr_box_thresh: float = 0.50
     rapidocr_thresh: float = 0.20
-    rapidocr_limit_side_len: int = 960
+    rapidocr_limit_side_len: int = 1536
     rapidocr_limit_type: str = "max"
     rapidocr_use_dilation: bool = False
     rapidocr_split_tall_boxes: bool = False

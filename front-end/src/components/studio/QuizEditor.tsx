@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
   Plus,
   Trash2,
@@ -12,8 +12,11 @@ import {
   ArrowLeft,
   Loader2,
   FileCheck,
+  Database,
 } from "lucide-react";
 import { QuestionEdit } from "../../lib/types";
+import { QuestionBankPickerModal } from "./QuestionBankPickerModal";
+
 
 interface QuizEditorProps {
   questions: QuestionEdit[];
@@ -37,6 +40,15 @@ export function QuizEditor({
   isSaving,
 }: QuizEditorProps) {
   const letters = ["A", "B", "C", "D", "E", "F", "G", "H"];
+  const [isBankPickerOpen, setIsBankPickerOpen] = useState(false);
+
+  // Tập hợp question text đã có trong đề (để highlight "Đã có trong đề" trong modal)
+  const existingTexts = new Set(questions.map((q) => q.questionText.trim()));
+
+  const handleAddFromBank = (newQuestions: QuestionEdit[]) => {
+    onQuestionsChange([...questions, ...newQuestions]);
+  };
+
 
   // Update a question field
   const handleUpdateQuestion = (index: number, updates: Partial<QuestionEdit>) => {
@@ -156,15 +168,32 @@ export function QuizEditor({
 
         <div className="flex items-center gap-2">
           <button
+            id="btn-quiz-editor-add-from-bank"
             type="button"
-            onClick={handleAddNewQuestion}
+            onClick={() => setIsBankPickerOpen(true)}
             className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 px-3.5 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-900/60"
           >
+            <Database className="h-4 w-4" />
+            <span>+ Thêm từ Thư viện</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleAddNewQuestion}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-2 text-xs font-bold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
             <Plus className="h-4 w-4" />
-            <span>Thêm câu hỏi mới</span>
+            <span>Tự tạo câu hỏi mới</span>
           </button>
         </div>
       </div>
+
+      {/* Bank Picker Modal */}
+      <QuestionBankPickerModal
+        isOpen={isBankPickerOpen}
+        onClose={() => setIsBankPickerOpen(false)}
+        onAddQuestions={handleAddFromBank}
+        existingQuestionTexts={existingTexts}
+      />
 
       {/* Questions Card List */}
       <div className="space-y-6">
