@@ -244,6 +244,21 @@ class BankQuestionBatchCreate(CamelModel):
     questions: list[BankQuestionCreate] = Field(default_factory=list, min_length=1, max_length=100)
 
 
+class ExtractQuestionsRequest(CamelModel):
+    """Body cho POST /api/v1/ai/extract-questions để bóc tách câu hỏi từ văn bản."""
+
+    text: str
+    default_category: str = "Chung"
+    default_difficulty: str = "medium"
+
+
+class ExtractQuestionsResponse(CamelModel):
+    """Kết quả trả về sau khi bóc tách toàn bộ câu hỏi từ văn bản."""
+
+    questions: list[BankQuestionCreate] = Field(default_factory=list)
+    total_extracted: int = 0
+
+
 class BankQuestionUpdate(CamelModel):
     """Cập nhật một phần câu hỏi trong ngân hàng (PATCH semantics qua PUT)."""
 
@@ -277,3 +292,16 @@ class BankQuestionListResponse(CamelModel):
 
 class BankCategoriesResponse(CamelModel):
     categories: list[str]
+
+
+class BankMatrixGenerateRequest(CamelModel):
+    category: str | None = None
+    easy_count: int = Field(default=0, ge=0, le=100)
+    medium_count: int = Field(default=0, ge=0, le=100)
+    hard_count: int = Field(default=0, ge=0, le=100)
+
+
+class BankMatrixGenerateResponse(CamelModel):
+    questions: list[BankQuestionSchema]
+    total: int
+    warnings: list[str] = Field(default_factory=list)

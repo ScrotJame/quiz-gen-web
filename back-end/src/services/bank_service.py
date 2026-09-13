@@ -4,6 +4,8 @@ import uuid
 
 from src.core.exceptions import AppError, EntityNotFoundError
 from src.models.schemas import (
+    BankMatrixGenerateRequest,
+    BankMatrixGenerateResponse,
     BankQuestionBatchCreate,
     BankQuestionCreate,
     BankQuestionSchema,
@@ -90,6 +92,21 @@ class BankService:
         if not deleted:
             raise BankQuestionNotFoundError(f"Không tìm thấy câu hỏi với mã: {question_id}")
         return True
+
+    async def sample_by_matrix(
+        self, data: BankMatrixGenerateRequest
+    ) -> BankMatrixGenerateResponse:
+        questions, warnings = await self.repo.sample_by_matrix(
+            category=data.category,
+            easy_count=data.easy_count,
+            medium_count=data.medium_count,
+            hard_count=data.hard_count,
+        )
+        return BankMatrixGenerateResponse(
+            questions=questions,
+            total=len(questions),
+            warnings=warnings,
+        )
 
     # ─── Private helpers ─────────────────────────────────────────────────────
 

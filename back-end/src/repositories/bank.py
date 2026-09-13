@@ -206,3 +206,48 @@ class SqlBankRepository:
             await session.delete(row)
             await session.commit()
         return True
+
+    async def sample_by_matrix(
+        self,
+        *,
+        category: str | None = None,
+        easy_count: int = 0,
+        medium_count: int = 0,
+        hard_count: int = 0,
+    ) -> tuple[list[BankQuestionSchema], list[str]]:
+        """Bốc ngẫu nhiên câu hỏi theo ma trận độ khó và danh mục (chống N+1)."""
+        sampled_questions: list[BankQuestionSchema] = []
+        warnings: list[str] = []
+
+        difficulty_requests = [
+            ("easy", "Dễ", easy_count),
+            ("medium", "Trung bình", medium_count),
+            ("hard", "Khó", hard_count),
+        ]
+
+        async with self.session_factory() as session:
+            for diff_val, diff_label, count in difficulty_requests:
+                if count <= 0:
+                    continue
+
+                stmt = (
+                    select(BankQuestionTable)
+                    .options(selectinload(BankQuestionTable.options))
+                    .where(BankQuestionTable.difficulty == diff_val)
+                )
+                if category:
+                    stmt = stmt.where(BankQuestionTable.category == category)
+
+                stmt = stmt.order_by(func.random()).limit(count)
+                rows = (await session.execute(stmt)).scalars().all()
+                found_count = len(rows)
+
+                if found_count < count:
+                    warnings.append(
+                        f"Mức độ '{diff_label}': Kho chỉ có {found_count} câu (yêu cầu {count} câu), đã lấy {found_count} câu."
+                    )
+
+                for r in rows:
+                    sampled_questions.append(_to_schema(r))
+
+        return sampled_questions, warnings

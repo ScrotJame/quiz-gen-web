@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends, Query, Response, status
 
 from src.models.schemas import (
     BankCategoriesResponse,
+    BankMatrixGenerateRequest,
+    BankMatrixGenerateResponse,
     BankQuestionBatchCreate,
     BankQuestionListResponse,
     BankQuestionSchema,
@@ -23,6 +25,20 @@ def get_bank_service() -> BankService:
 
 
 BankServiceDep = Annotated[BankService, Depends(get_bank_service)]
+
+
+@router.post(
+    "/matrix-generate",
+    response_model=BankMatrixGenerateResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Sinh danh sách câu hỏi theo ma trận tiêu chí",
+)
+async def matrix_generate_questions(
+    data: BankMatrixGenerateRequest,
+    service: BankServiceDep,
+) -> BankMatrixGenerateResponse:
+    """Bốc ngẫu nhiên câu hỏi từ ngân hàng theo độ khó và danh mục."""
+    return await service.sample_by_matrix(data)
 
 
 @router.post(
