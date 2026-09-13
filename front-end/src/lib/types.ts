@@ -252,10 +252,34 @@ export interface BankCategoriesResponse {
   categories: string[];
 }
 
+export interface ExtractQuestionsRequest {
+  text: string;
+  defaultCategory?: string;
+  defaultDifficulty?: Difficulty;
+}
+
+export interface ExtractQuestionsResponse {
+  questions: BankQuestionCreate[];
+  totalExtracted: number;
+}
+
 export interface BankListParams {
   category?: string;
   difficulty?: string;
   search?: string;
   page?: number;
   limit?: number;
+}
+
+export interface BankMatrixGenerateRequest {
+  category?: string | null;
+  easyCount: number;
+  mediumCount: number;
+  hardCount: number;
+}
+
+export interface BankMatrixGenerateResponse {
+  questions: BankQuestionSchema[];
+  total: number;
+  warnings: string[];
 }

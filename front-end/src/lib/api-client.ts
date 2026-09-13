@@ -262,6 +262,22 @@ export async function cleanText(
 }
 
 /**
+ * Bóc tách toàn bộ câu hỏi trắc nghiệm có sẵn từ văn bản đã OCR và chuẩn hóa
+ */
+export async function extractQuestionsFromText(payload: {
+  text: string;
+  defaultCategory?: string;
+  defaultDifficulty?: Difficulty;
+}): Promise<ExtractQuestionsResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/ai/extract-questions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return await handleResponse<ExtractQuestionsResponse>(res);
+}
+
+/**
  * Lưu đề thi vào cơ sở dữ liệu
  */
 export async function createQuiz(payload: QuizCreatePayload): Promise<QuizDetail> {
@@ -278,10 +294,13 @@ export async function createQuiz(payload: QuizCreatePayload): Promise<QuizDetail
 import type {
   BankCategoriesResponse,
   BankListParams,
+  BankMatrixGenerateRequest,
+  BankMatrixGenerateResponse,
   BankQuestionBatchCreate,
   BankQuestionListResponse,
   BankQuestionSchema,
   BankQuestionUpdate,
+  ExtractQuestionsResponse,
 } from "./types";
 
 /**
@@ -352,4 +371,18 @@ export async function deleteBankQuestion(questionId: string): Promise<void> {
     method: "DELETE",
   });
   if (!res.ok) await handleResponse<void>(res);
+}
+
+/**
+ * Sinh danh sách câu hỏi theo ma trận tiêu chí
+ */
+export async function generateBankMatrix(
+  data: BankMatrixGenerateRequest
+): Promise<BankMatrixGenerateResponse> {
+  const res = await fetch(`${API_BASE_URL}/api/v1/bank/matrix-generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return await handleResponse<BankMatrixGenerateResponse>(res);
 }
