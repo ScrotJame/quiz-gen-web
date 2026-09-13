@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Sparkles, PlusCircle } from "lucide-react";
+import { Sparkles, PlusCircle, Database } from "lucide-react";
 import { checkBackendHealth } from "../../lib/api-client";
 
 export function Navbar() {
@@ -72,6 +72,15 @@ export function Navbar() {
                 : "Đang kiểm tra..."}
             </span>
           </div>
+
+          {/* Question Bank Link -> /bank */}
+          <Link
+            href="/bank"
+            className="flex items-center gap-1.5 rounded-xl border border-zinc-200/80 bg-zinc-50 px-3.5 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 hover:text-indigo-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors shadow-2xs"
+          >
+            <Database className="h-4 w-4 text-indigo-500" />
+            <span className="hidden sm:inline">Ngân Hàng Câu Hỏi</span>
+          </Link>
 
           {/* Primary Create Quiz Button -> /create/ocr */}
           <Link
