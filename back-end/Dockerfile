@@ -1,27 +1,27 @@
 # ==============================================================================
-# Stage 1: Builder (Install dependencies into virtual environment)
+# Stage 1: Builder (Install runtime dependencies into virtual environment)
 # ==============================================================================
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
+# Cài đặt build-essential để biên dịch các package native C/C++ nếu cần
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# Khởi tạo virtual environment sạch
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-COPY requirements.txt .
+COPY requirements-runtime.txt .
 
-# Cài đặt trước PyTorch CPU-only wheel để tránh tải bản CUDA nặng 1.2GB+
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --upgrade pip && \
-    pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
-    pip install --no-cache-dir -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+# Cài đặt runtime dependencies (ONNX Runtime, FastAPI, RapidOCR, OpenCV - KHÔNG cài PyTorch/VietOCR)
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements-runtime.txt
 
 # ==============================================================================
-# Stage 2: Runtime (Minimal production container)
+# Stage 2: Production (Minimal runtime image, ONNX Runtime inference)
 # ==============================================================================
 FROM python:3.11-slim AS runner
 
@@ -34,7 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Sao chép virtual environment từ builder
+# Sao chép virtual environment từ builder (hoàn toàn không có torch / torchvision / vietocr)
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
@@ -45,7 +45,8 @@ RUN useradd -m -u 1001 appuser && \
     mkdir -p /app/src && \
     chown -R appuser:appuser /app
 
-# Sao chép mã nguồn ứng dụng
+# Sao chép requirements và mã nguồn (chứa 3 file .onnx và vocab_chars.txt trong src/models/vietocr/)
+COPY --chown=appuser:appuser requirements-runtime.txt ./
 COPY --chown=appuser:appuser src/ ./src/
 
 USER appuser

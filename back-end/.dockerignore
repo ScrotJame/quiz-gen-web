@@ -14,3 +14,6 @@ ENV
 .env*
 tests
 .git
+*.pth
+src/models/export_vietocr_to_onnx.py
+requirements-dev.txt

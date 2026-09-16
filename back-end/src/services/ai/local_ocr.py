@@ -26,7 +26,7 @@ from src.config import get_settings
 from src.models.schemas import OcrPageResponse
 
 logger = logging.getLogger(__name__)
-
+_CIRCLE_JUNK = r'[O0o6©®°@\*~\-_]'
 
 def clean_quiz_line(text: str) -> str:
     """Chuẩn hóa các ký tự và tiền tố đáp án trắc nghiệm (ví dụ đáp án khoanh tròn bị dính nét mực)."""
@@ -103,49 +103,91 @@ def clean_quiz_lines(lines: list[str]) -> list[str]:
         if not t:
             continue
         raw_normalized.append(t)
-
+ 
     merged_lines: list[str] = []
     for line in raw_normalized:
         t = line.strip()
+ 
+        # ===== NHÓM MỚI: chuẩn hóa pattern khoanh tròn bút mực phổ biến =====
+        # Áp dụng TRƯỚC các rule đặc thù bên dưới, vì đây là các case mà
+        # nhãn đáp án (a/b/c/d hoặc A/B/C/D) vẫn còn đọc được, chỉ bị
+        # dính ký hiệu rác quanh nó — generic hóa được, không cần biết nội dung.
+ 
+        # (1) Rác đứng TRƯỚC nhãn: "O b. Nội dung", "©a) Nội dung", "6 c. Nội dung"
+        t = re.sub(
+            rf'^\s*{_CIRCLE_JUNK}{{1,3}}\s*(?=[a-dA-D][\.\)])',
+            '',
+            t,
+        )
+ 
+        # (2) Nhãn bị bao trong ngoặc/ký hiệu khoanh: "(A)", "[b]", "©A)"
+        t = re.sub(
+            rf'^[\(\[{_CIRCLE_JUNK}]*([a-dA-D])[\)\]]{{1,2}}\s*',
+            lambda m: f'{m.group(1)}. ',
+            t,
+        )
+ 
+        # (3) Nhãn bị lặp đôi do nét khoanh đè lên (2 nét trùng): "aa.", "AA)", "bb."
+        t = re.sub(
+            r'^([a-dA-D])\1[\.\)]\s*',
+            lambda m: f'{m.group(1)}. ',
+            t,
+        )
+ 
+        # (4) Rác đứng NGAY SAU dấu phân cách của nhãn: "b.O Nội dung", "c.)Nội dung"
+        t = re.sub(
+            rf'^([a-dA-D])[\.\)]\s*[\){_CIRCLE_JUNK[1:-1]}]{{1,2}}\s*',
+            lambda m: f'{m.group(1)}. ',
+            t,
+        )
+ 
+        # (5) Chuẩn hóa dấu phân cách còn sót lại từ rule (1)/(2): "a)" -> "a. "
+        t = re.sub(
+            r'^([a-dA-D])\)\s*',
+            lambda m: f'{m.group(1)}. ',
+            t,
+        )
+        # ===== HẾT NHÓM MỚI =====
+ 
         # Dính nét bút khoanh tròn vào đáp án 'd. Tất cả':
         t = re.sub(
             r'^(?:Tri|Trt|@|®|Đ|T\)|[Tt]\))(?:\s+(?:Tri|Trt))?\s+.*([Cc]ác đáp án|[Tt]ất cả.*)',
             r'd. Tất cả các đáp án',
             t,
         )
-
+ 
         # Dính nét bút khoanh tròn vào chữ cái 'O' / '0' / '6' / '©' / '®':
         t = re.sub(r'^[O0o6]\s*([Ss]ự ra đời)', r'b.Sự ra đời', t)
-
+ 
         # C. Bảo vệ nền tảng tư tưởng cộng sản (sửa B.O VỆ NỀN TẢNG...)
         if re.search(r'B[\.O\s]+VỆ NỀN TẢNG TƯ TƯỞNG', t, re.IGNORECASE):
             t = "C. Bảo vệ nền tảng tư tưởng cộng sản"
-
+ 
         # 32, Tìm đáp án... -> 32.Tìm đáp án...
         t = re.sub(r'^32[,\.]\s*Tìm', r'32.Tìm', t)
         t = re.sub(r'^33[,\.]\s*Chỉ', r'33.Chỉ', t)
         t = re.sub(r'^34[,\.]\s*Nhân', r'34.Nhân', t)
-
+ 
         # Chú nghĩa Mác - Lênin / Chủ nghĩa Mác - Lênin -> b. Chủ nghĩa Mác-Lênin
         if re.search(r'Ch[ủú]\s+nghĩa Mác\s*-\s*Lênin', t):
             t = "b. Chủ nghĩa Mác-Lênin"
-
+ 
         # c. Lý luận khoa học -> c. Lý luận học
         if re.search(r'c\.\s*Lý luận (?:khoa )?học', t):
             t = "c. Lý luận học"
-
+ 
         # ba sự trưởng thành -> b. Sự trưởng thành vượt bậc của giai cấp công nhân
         if re.search(r'(?:ba|b\.)\s+sự trưởng thành', t, re.IGNORECASE):
             t = "b. Sự trưởng thành vượt bậc của giai cấp công nhân"
-
+ 
         # c. Dự báo sự thắng lợi của giai cấp tư sản -> giai cấp tư bản
         t = re.sub(r'giai cấp tư sản', 'giai cấp tư bản', t)
-
+ 
         # Sửa lỗi chính tả phổ biến do OCR tiếng Việt
         t = re.sub(r'\bTỉnh thần\b', 'Tinh thần', t)
         t = re.sub(r'\blịch sữ\b', 'lịch sử', t)
         t = re.sub(r'\bđấu điều gi\b', 'đánh dấu điều gì', t)
-
+ 
         # Nối dòng nếu dòng trước là đầu câu hỏi 34 hoặc 35 (tránh ngắt dòng giữa câu hỏi)
         if merged_lines:
             prev = merged_lines[-1]
@@ -157,9 +199,9 @@ def clean_quiz_lines(lines: list[str]) -> list[str]:
             ):
                 merged_lines[-1] = f"{prev} mạng của giai cấp công nhân đã đánh dấu điều gì?"
                 continue
-
+ 
         merged_lines.append(t)
-
+ 
     return merged_lines
 
 
@@ -232,8 +274,11 @@ class VietOCRSeq2SeqRecognizer:
     """
 
     def __init__(self, weights_path: str, device: str = "cpu", beamsearch: bool = False) -> None:
-        from vietocr.tool.config import Cfg  # type: ignore[import-untyped]
-        from vietocr.tool.predictor import Predictor  # type: ignore[import-untyped]
+        try:
+            from vietocr.tool.config import Cfg  # type: ignore[import-untyped]
+            from vietocr.tool.predictor import Predictor  # type: ignore[import-untyped]
+        except ImportError as exc:
+            raise RuntimeError("vietocr hoặc torch chưa được cài đặt trong môi trường này.") from exc
 
         config = Cfg.load_config_from_name("vgg_seq2seq")
         # Quan trọng: tắt pretrained=True của torchvision để không tải thêm 548MB vgg16 từ internet
@@ -313,13 +358,21 @@ _IMG_MAX_WIDTH = 512
 _ONNX_REQUIRED_FILES = ("cnn.onnx", "encoder.onnx", "decoder.onnx", "vocab_chars.txt")
 
 
+_VIETOCR_VOCAB = (
+    " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+    "ÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚÝàáâãèéêìíòóôõùúý"
+    "ĂăĐđĨĩŨũƠơƯư"
+)
+
+
 def _resolve_vietocr_onnx_dir() -> str | None:
     """Tìm thư mục chứa cnn.onnx/encoder.onnx/decoder.onnx/vocab_chars.txt.
 
-    Thứ tự ưu tiên: biến môi trường VIETOCR_ONNX_DIR > thư mục cache mặc định.
+    Thứ tự ưu tiên: biến môi trường VIETOCR_ONNX_DIR > thư mục models/vietocr > thư mục cache mặc định.
     """
     env_dir = os.environ.get("VIETOCR_ONNX_DIR", "").strip()
-    for d in (env_dir, _VIETOCR_CACHE_DIR):
+    for d in (env_dir, _LOCAL_MODELS_DIR, _VIETOCR_CACHE_DIR):
         if d and all(os.path.isfile(os.path.join(d, name)) for name in _ONNX_REQUIRED_FILES):
             return d
     return None
@@ -331,12 +384,10 @@ def _softmax(x: np.ndarray, axis: int = -1) -> np.ndarray:
 
 
 class VietOCROnnxRecognizer:
-    """Nhận diện chữ tiếng Việt bằng VietOCR export sang ONNX.
+    """Nhận diện chữ tiếng Việt bằng VietOCR export sang ONNX (3 sessions cnn, encoder, decoder).
 
     Gồm 3 session (CNN backbone + Sequence Encoder + Decoder autoregressive),
-    decode giống hệt logic gốc vietocr.tool.translate.translate() -- KHÔNG
-    phải CTC. `model_dir` phải chứa cnn.onnx, encoder.onnx, decoder.onnx,
-    vocab_chars.txt (sinh ra từ script export_vietocr_onnx.py).
+    decode autoregressive qua 3 session ONNX bằng onnxruntime thuần.
     """
 
     def __init__(self, model_dir: str) -> None:
@@ -359,11 +410,10 @@ class VietOCROnnxRecognizer:
 
         with open(os.path.join(model_dir, "vocab_chars.txt"), encoding="utf-8") as f:
             chars = f.read()
-        # Index 0,1,2 là <pad>, <sos>, <eos> -- đúng thứ tự vietocr.model.vocab.Vocab.
-        # Không in ra 3 token này.
-        self._idx2char: dict[int, str] = {0: "", 1: "", 2: ""}
+        # Index 0,1,2,3 là <pad>, <sos>, <eos>, <mask> -- đúng thứ tự vietocr.model.vocab.Vocab.
+        self._idx2char: dict[int, str] = {0: "", 1: "", 2: "", 3: "*"}
         for i, c in enumerate(chars):
-            self._idx2char[i + 3] = c
+            self._idx2char[i + 4] = c
 
         logger.info("VietOCR ONNX (cnn+encoder+decoder) khởi tạo thành công từ: %s", model_dir)
 
@@ -383,46 +433,82 @@ class VietOCROnnxRecognizer:
         arr = arr.transpose(2, 0, 1)  # HWC -> CHW
         return arr[np.newaxis, ...]  # (1, 3, H, W)
 
-    def _recognize_one(self, img_bgr: np.ndarray) -> str:
+    def _recognize_one(self, img_bgr: np.ndarray) -> tuple[str, float]:
         tensor = self._preprocess_image(img_bgr)
         if tensor is None:
-            return ""
+            return "", 0.0
 
         src = self._cnn_sess.run(None, {"img": tensor})[0]
-        memory = self._enc_sess.run(None, {"src": src})[0]
+        enc_out, hid = self._enc_sess.run(None, {"src": src})
 
-        # Decode autoregressive: lặp gọi decoder, mỗi bước sinh thêm 1 token,
-        # giống hệt vòng while trong vietocr/tool/translate.py.
-        translated: list[list[int]] = [[_SOS_TOKEN]]
+        token_ids: list[int] = []
+        token_probs: list[float] = []
+        curr_token = np.array([_SOS_TOKEN], dtype=np.int64)
+        curr_hid = hid
+
         for _ in range(_MAX_SEQ_LEN):
-            tgt_inp = np.array(translated, dtype=np.int64)  # (seq_len, batch=1)
-            output, memory = self._dec_sess.run(None, {"tgt_inp": tgt_inp, "memory": memory})
-            probs = _softmax(output, axis=-1)
-            next_token = int(np.argmax(probs[:, -1, :], axis=-1)[0])
-            translated.append([next_token])
+            pred, curr_hid, _attn = self._dec_sess.run(
+                None,
+                {
+                    "tgt_input": curr_token,
+                    "hidden": curr_hid,
+                    "encoder_outputs": enc_out,
+                },
+            )
+            probs = _softmax(pred[0], axis=-1)
+            next_token = int(np.argmax(probs))
             if next_token == _EOS_TOKEN:
                 break
+            token_ids.append(next_token)
+            token_probs.append(float(probs[next_token]))
+            curr_token = np.array([next_token], dtype=np.int64)
 
-        token_ids = [row[0] for row in translated[1:]]  # bỏ sos
-        if token_ids and token_ids[-1] == _EOS_TOKEN:
-            token_ids = token_ids[:-1]
+        text = "".join(self._idx2char.get(i, "") for i in token_ids)
+        mean_prob = float(np.mean(token_probs)) if token_probs else 0.0
+        return text, mean_prob
 
-        return "".join(self._idx2char.get(i, "") for i in token_ids)
-
-    def recognize_batch(self, line_images: list[np.ndarray]) -> list[str]:
-        # Lưu ý: decode autoregressive khó batch thật sự đơn giản (mỗi ảnh có
-        # thể ra <eos> ở bước khác nhau), nên xử lý tuần tự từng ảnh để đảm
-        # bảo đúng. Nếu cần tăng tốc về sau, có thể gộp batch theo chiều
-        # batch của tgt_inp/memory (export đã có dynamic_axes hỗ trợ) kèm
-        # logic theo dõi ảnh nào đã kết thúc để dừng sớm.
-        results: list[str] = []
+    def recognize_batch(
+        self, line_images: list[np.ndarray | Any]
+    ) -> tuple[list[str], list[float]]:
+        texts: list[str] = []
+        probs: list[float] = []
+        cv2 = _import_cv2()
         for img in line_images:
+            bgr_img: np.ndarray | None = None
+            if isinstance(img, np.ndarray):
+                bgr_img = img
+            elif cv2 is not None and hasattr(img, "convert"):
+                bgr_img = cv2.cvtColor(np.array(img.convert("RGB")), cv2.COLOR_RGB2BGR)
+
+            if bgr_img is None or bgr_img.size == 0:
+                texts.append("")
+                probs.append(0.0)
+                continue
+
             try:
-                results.append(self._recognize_one(img))
+                t, p = self._recognize_one(bgr_img)
+                texts.append(t.strip())
+                probs.append(p)
             except Exception as exc:
                 logger.warning("VietOCR ONNX inference lỗi một dòng: %s", exc)
-                results.append("")
-        return results
+                texts.append("")
+                probs.append(0.0)
+        return texts, probs
+
+    def _ctc_greedy_decode(self, logits: np.ndarray) -> str:
+        vocab = _VIETOCR_VOCAB
+        vocab_size = len(vocab)
+        indices = np.argmax(logits, axis=-1)
+        chars: list[str] = []
+        prev_idx = -1
+        for idx in indices:
+            if int(idx) >= vocab_size:  # blank token
+                prev_idx = -1
+                continue
+            if idx != prev_idx:
+                chars.append(vocab[int(idx)])
+            prev_idx = int(idx)
+        return "".join(chars)
 
 
 # ---------------------------------------------------------------------------
@@ -465,34 +551,34 @@ class LocalOcrEngine:
             logger.warning("Không thể khởi tạo RapidOCR với tham số tùy chỉnh (%s). Dùng mặc định.", exc)
             self._rapidocr = RapidOCRClass()
 
-        # 1. Ưu tiên: VietOCR vgg_seq2seq.pth (mô hình chuẩn Tiếng Việt có dấu)
-        self._seq2seq_recognizer: VietOCRSeq2SeqRecognizer | None = None
-        seq2seq_path = _resolve_vgg_seq2seq_path()
-        if seq2seq_path is not None:
-            try:
-                self._seq2seq_recognizer = VietOCRSeq2SeqRecognizer(
-                    weights_path=seq2seq_path,
-                    device=settings.vietocr_device,
-                    beamsearch=settings.vietocr_beamsearch,
-                )
-                logger.info("LocalOcrEngine: sử dụng VietOCR Seq2Seq (%s)", seq2seq_path)
-            except Exception as exc:
-                logger.warning("Không thể khởi tạo VietOCR Seq2Seq (%s). Thử các giải pháp thay thế.", exc)
-                self._seq2seq_recognizer = None
-
-        # 2. Dự phòng 2: VietOCR ONNX Recognizer nếu có
+        # 1. Ưu tiên 1: VietOCR ONNX Recognizer (mô hình chuẩn Tiếng Việt có dấu ONNX runtime)
         self._onnx_recognizer: VietOCROnnxRecognizer | None = None
-        if self._seq2seq_recognizer is None:
-            onnx_dir = _resolve_vietocr_onnx_dir()
-            if onnx_dir is not None:
-                try:
-                    self._onnx_recognizer = VietOCROnnxRecognizer(onnx_dir)
-                    logger.info("LocalOcrEngine: sử dụng VietOCR ONNX Recognizer (%s)", onnx_dir)
-                except Exception as exc:
-                    logger.warning("Không thể khởi tạo VietOCROnnxRecognizer: %s", exc)
-                    self._onnx_recognizer = None
+        onnx_dir = _resolve_vietocr_onnx_dir()
+        if onnx_dir is not None:
+            try:
+                self._onnx_recognizer = VietOCROnnxRecognizer(onnx_dir)
+                logger.info("LocalOcrEngine: sử dụng VietOCR ONNX Recognizer (%s)", onnx_dir)
+            except Exception as exc:
+                logger.warning("Không thể khởi tạo VietOCROnnxRecognizer: %s", exc)
+                self._onnx_recognizer = None
 
-        if self._seq2seq_recognizer is None and self._onnx_recognizer is None:
+        # 2. Dự phòng (Dev/Legacy): VietOCR Seq2Seq PyTorch nếu có cài đặt vietocr
+        self._seq2seq_recognizer: VietOCRSeq2SeqRecognizer | None = None
+        if self._onnx_recognizer is None:
+            seq2seq_path = _resolve_vgg_seq2seq_path()
+            if seq2seq_path is not None:
+                try:
+                    self._seq2seq_recognizer = VietOCRSeq2SeqRecognizer(
+                        weights_path=seq2seq_path,
+                        device=settings.vietocr_device,
+                        beamsearch=settings.vietocr_beamsearch,
+                    )
+                    logger.info("LocalOcrEngine: fallback sử dụng VietOCR Seq2Seq PyTorch (%s)", seq2seq_path)
+                except Exception as exc:
+                    logger.warning("Không thể khởi tạo VietOCR Seq2Seq (%s): %s", seq2seq_path, exc)
+                    self._seq2seq_recognizer = None
+
+        if self._onnx_recognizer is None and self._seq2seq_recognizer is None:
             logger.info("Sử dụng RapidOCR mặc định cho toàn bộ pipeline (Detector + Recognizer).")
 
         logger.info("LocalOcrEngine khởi tạo hoàn tất.")
@@ -881,12 +967,13 @@ class LocalOcrEngine:
             logger.warning("Page normalization thất bại (%s), tiếp tục với ảnh gốc.", e)
 
         # --------------------------------------------------------------
-        # Pipeline 1: RapidOCR Det + VietOCR Seq2Seq Recognizer (vgg_seq2seq)
+        # Pipeline 1: RapidOCR Det + VietOCR Recognizer (ONNX ưu tiên, Seq2Seq fallback)
         # --------------------------------------------------------------
-        if self._seq2seq_recognizer is not None:
+        recognizer = self._onnx_recognizer or self._seq2seq_recognizer
+        if recognizer is not None:
             raw_boxes = self._run_detection(image, det_params)
             if not raw_boxes:
-                logger.info("Local OCR (VietOCR Seq2Seq): không phát hiện vùng chữ nào.")
+                logger.info("Local OCR: không phát hiện vùng chữ nào.")
                 return "", 0, 0.0
 
             grouped_lines = self._sort_and_group_lines(raw_boxes, image_shape=image.shape)
@@ -904,12 +991,12 @@ class LocalOcrEngine:
             if not all_crops:
                 return "", 0, 0.0
 
-            # Batch recognition
+            # Batch recognition (ONNX runtime hoặc Seq2Seq)
             all_sents: list[str] = []
             all_probs: list[float] = []
             for i in range(0, len(all_crops), self._batch_size):
                 batch = all_crops[i : i + self._batch_size]
-                sents, probs = self._seq2seq_recognizer.recognize_batch(batch)
+                sents, probs = recognizer.recognize_batch(batch)
                 all_sents.extend(sents)
                 all_probs.extend(probs)
 
@@ -930,40 +1017,15 @@ class LocalOcrEngine:
             valid_probs = [p for p in all_probs if p > 0.0]
             avg_conf = round(sum(valid_probs) / len(valid_probs), 4) if valid_probs else 0.88
 
+            engine_label = "VietOCR ONNX" if recognizer is self._onnx_recognizer else "VietOCR Seq2Seq"
             logger.info(
-                "Local OCR (VietOCR Seq2Seq): %d dòng -> %d ký tự, conf=%.2f",
+                "Local OCR (%s): %d dòng -> %d ký tự, conf=%.2f",
+                engine_label,
                 len(final_lines),
                 len(full_text),
                 avg_conf,
             )
             return full_text, len(final_lines), avg_conf
-
-        # --------------------------------------------------------------
-        # Pipeline 2: RapidOCR Det + VietOCR ONNX Recognizer
-        # --------------------------------------------------------------
-        if self._onnx_recognizer is not None:
-            raw_boxes = self._run_detection(image, det_params)
-            if not raw_boxes:
-                return "", 0, 0.0
-
-            sorted_boxes = self._sort_reading_order(raw_boxes, image_shape=image.shape)
-            line_images: list[np.ndarray] = []
-            for box in sorted_boxes:
-                cropped = self._crop_line(image, box)
-                if cropped is not None and cropped.size > 0:
-                    line_images.append(cropped)
-
-            if not line_images:
-                return "", 0, 0.0
-
-            recognized: list[str] = []
-            for i in range(0, len(line_images), self._batch_size):
-                batch = line_images[i : i + self._batch_size]
-                recognized.extend(self._onnx_recognizer.recognize_batch(batch))
-
-            lines = clean_quiz_lines([t.strip() for t in recognized if t.strip()])
-            full_text = "\n".join(lines)
-            return full_text, len(lines), 0.85
 
         # --------------------------------------------------------------
         # Pipeline 3: RapidOCR mặc định (Det + Rec)
@@ -1045,6 +1107,7 @@ class LocalOcrEngine:
             average_confidence=confidence,
             provider="local_vietocr",
         )
+
 
 
 # ---------------------------------------------------------------------------

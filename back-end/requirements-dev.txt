@@ -1,0 +1,14 @@
+-r requirements-runtime.txt
+
+# Model Export & Conversion (Dev only - not used in production)
+torch>=2.0.0
+torchvision>=0.15.0
+vietocr>=0.3.13
+onnx>=1.16.0
+onnxscript>=0.7.0
+gdown>=4.4.0
+
+# Testing & Dev
+pytest>=8.0.0
+pytest-asyncio>=0.24.0
+httpx>=0.28.0
