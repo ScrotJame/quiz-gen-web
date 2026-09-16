@@ -25,6 +25,15 @@ interface PageProps {
   params: Promise<{ quizId: string }>;
 }
 
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 export default function QuizTakingPage({ params }: PageProps) {
   const resolvedParams = use(params);
   const quizId = resolvedParams.quizId;
@@ -39,21 +48,19 @@ export default function QuizTakingPage({ params }: PageProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
   const [flaggedIds, setFlaggedIds] = useState<string[]>([]);
+  const [timeRemaining, setTimeRemaining] = useState<number>(0);
+  const [isTimerVisible, setIsTimerVisible] = useState<boolean>(true);
+  const [isPaused, setIsPaused] = useState(false);
   const [autoSavedAt, setAutoSavedAt] = useState<Date | null>(null);
 
-  // State Timer
-  const [timeRemaining, setTimeRemaining] = useState<number>(900); // 15 phút mặc định
-  const [isTimerVisible, setIsTimerVisible] = useState(true);
-  const [isPaused, setIsPaused] = useState(false);
-
-  // State Modal nộp bài & Kết quả
+  // Modal / Trạng thái nộp bài
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<AttemptResult | null>(null);
 
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 1. Tải đề thi và khởi tạo lượt thi
+  // 1. Tải đề thi và khởi tạo lượt thi (tự động xáo trộn ngẫu nhiên thứ tự câu hỏi)
   useEffect(() => {
     let ignore = false;
 
@@ -65,7 +72,6 @@ export default function QuizTakingPage({ params }: PageProps) {
         // Lấy thông tin quiz từ backend
         const quizData = await getQuizDetail(quizId);
         if (ignore) return;
-        setQuiz(quizData);
 
         // Đặt thời gian theo cấu hình đề
         const initialSeconds = (quizData.timeLimitMinutes || 15) * 60;
@@ -75,6 +81,7 @@ export default function QuizTakingPage({ params }: PageProps) {
         const storageKey = `quiz_session_${quizId}`;
         const savedSession = localStorage.getItem(storageKey);
         let currentAttempt: AttemptResult | null = null;
+        let finalQuestions = quizData.questions;
 
         if (savedSession) {
           try {
@@ -87,11 +94,34 @@ export default function QuizTakingPage({ params }: PageProps) {
             if (parsed.timeRemaining !== undefined && parsed.timeRemaining > 0) {
               setTimeRemaining(parsed.timeRemaining);
             }
+            // Khôi phục đúng thứ tự câu hỏi ngẫu nhiên của phiên làm bài hiện tại
+            if (Array.isArray(parsed.shuffledQuestionIds) && parsed.shuffledQuestionIds.length > 0) {
+              const qMap = new Map(quizData.questions.map((q) => [q.id, q]));
+              const ordered: typeof quizData.questions = [];
+              for (const qId of parsed.shuffledQuestionIds) {
+                const item = qMap.get(qId);
+                if (item) {
+                  ordered.push(item);
+                  qMap.delete(qId);
+                }
+              }
+              finalQuestions = [...ordered, ...Array.from(qMap.values())];
+            } else {
+              finalQuestions = shuffleArray(quizData.questions);
+            }
             setAutoSavedAt(new Date());
           } catch {
-            // Không parse được thì bỏ qua
+            finalQuestions = shuffleArray(quizData.questions);
           }
+        } else {
+          // Phiên làm bài mới: Tự động xáo trộn ngẫu nhiên 100% các câu hỏi
+          finalQuestions = shuffleArray(quizData.questions);
         }
+
+        setQuiz({
+          ...quizData,
+          questions: finalQuestions,
+        });
 
         // Nếu chưa có attempt hợp lệ, gọi backend startAttempt
         if (!currentAttempt) {
@@ -119,7 +149,7 @@ export default function QuizTakingPage({ params }: PageProps) {
     };
   }, [quizId]);
 
-  // 2. Tự động lưu bài làm vào localStorage
+  // 2. Tự động lưu bài làm và thứ tự ngẫu nhiên vào localStorage
   useEffect(() => {
     if (!quiz || !attempt) return;
     const timeout = setTimeout(() => {
@@ -131,6 +161,7 @@ export default function QuizTakingPage({ params }: PageProps) {
           flaggedIds,
           currentIndex,
           timeRemaining,
+          shuffledQuestionIds: quiz.questions.map((q) => q.id),
           updatedAt: new Date().toISOString(),
         };
         localStorage.setItem(storageKey, JSON.stringify(payload));
@@ -313,6 +344,15 @@ export default function QuizTakingPage({ params }: PageProps) {
     setCurrentIndex(0);
     setTimeRemaining((quiz?.timeLimitMinutes || 15) * 60);
     setIsPaused(false);
+
+    // Xáo trộn ngẫu nhiên một thứ tự câu hỏi mới cho lượt làm lại
+    if (quiz) {
+      setQuiz({
+        ...quiz,
+        questions: shuffleArray(quiz.questions),
+      });
+    }
+
     try {
       const newAttempt = await startAttempt(quizId, "Thí sinh");
       setAttempt(newAttempt);

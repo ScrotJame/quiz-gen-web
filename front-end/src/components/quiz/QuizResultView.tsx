@@ -206,7 +206,10 @@ export function QuizResultView({ quiz, result, onRetry }: QuizResultViewProps) {
                     <div className="space-y-2">
                       {q.options.map((opt, oIdx) => {
                         const isUserSelected = selectedIds.includes(opt.id);
-                        const isRightAnswer = opt.isCorrect ?? false;
+                        const isRightAnswer =
+                          ans?.correctOptionIds && ans.correctOptionIds.length > 0
+                            ? ans.correctOptionIds.includes(opt.id)
+                            : (opt.isCorrect ?? false);
 
                         let optClass = "border-zinc-200 bg-zinc-50/50 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950/40 dark:text-zinc-300";
                         if (isRightAnswer) {
@@ -243,13 +246,13 @@ export function QuizResultView({ quiz, result, onRetry }: QuizResultViewProps) {
                     </div>
 
                     {/* Explanation */}
-                    {q.explanation && (
+                    {(ans?.explanation || q.explanation) && (
                       <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3.5 text-xs text-indigo-950 dark:border-indigo-900/50 dark:bg-indigo-950/30 dark:text-indigo-200">
                         <span className="font-bold flex items-center gap-1.5 mb-1">
                           <HelpCircle className="h-3.5 w-3.5 text-indigo-500" />
                           Giải thích chi tiết:
                         </span>
-                        <p className="leading-relaxed">{q.explanation}</p>
+                        <p className="leading-relaxed">{ans?.explanation || q.explanation}</p>
                       </div>
                     )}
                   </div>

@@ -81,6 +81,8 @@ export interface AttemptAnswerDetail {
   selectedOptionIds: string[];
   isCorrect: boolean;
   earnedPoints: number;
+  correctOptionIds?: string[];
+  explanation?: string | null;
 }
 
 export interface AttemptResult {

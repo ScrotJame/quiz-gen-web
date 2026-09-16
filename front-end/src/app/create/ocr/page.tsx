@@ -20,6 +20,7 @@ import {
   batchCreateBankQuestions,
   cleanText,
   createQuiz,
+  extractQuestionsFromText,
   generateQuizFromText,
   ocrPage,
 } from "../../../lib/api-client";
@@ -70,6 +71,7 @@ export default function OcrStudioPage() {
 
   // Bước 3: Ngân hàng câu hỏi (chờ duyệt)
   const [bankQuestions, setBankQuestions] = useState<BankQuestionCreate[]>([]);
+  const [isExtracting, setIsExtracting] = useState<boolean>(false);
   const [isSavingBank, setIsSavingBank] = useState<boolean>(false);
   const [bankSaved, setBankSaved] = useState<boolean>(false);
 
@@ -226,7 +228,10 @@ export default function OcrStudioPage() {
       validFiles.push(f);
     }
 
-    if (validFiles.length === 0) return;
+    // Sắp xếp file theo thứ tự tự nhiên (1, 2, 3... thay vì ngẫu nhiên hoặc đảo ngược của OS)
+    validFiles.sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
+    );
 
     const newPages: StudioPageItem[] = validFiles.map((file) => ({
       id: crypto.randomUUID(),
@@ -287,16 +292,20 @@ export default function OcrStudioPage() {
     });
   };
 
-  // Proceed to Step 2 (Merge & Clean)
-  const handleProceedToStep2 = () => {
-    const merged = pages
+  // Helper để gộp văn bản theo thứ tự hiện tại của các chunk
+  const getMergedFromPages = (pageList: StudioPageItem[]) => {
+    return pageList
       .map((p, i) => {
-        const header = pages.length > 1 ? `[Trang ${i + 1}]\n` : "";
+        const header = pageList.length > 1 ? `[Trang ${i + 1}]\n` : "";
         return `${header}${p.text.trim()}`;
       })
       .filter((t) => t.length > 0)
       .join("\n\n");
+  };
 
+  // Proceed to Step 2 (Merge & Clean)
+  const handleProceedToStep2 = () => {
+    const merged = getMergedFromPages(pages);
     setMergedText(merged);
     if (!title) {
       const firstLine = pages[0]?.text.trim().split("\n")[0] || "";
@@ -309,12 +318,40 @@ export default function OcrStudioPage() {
     setStep(2);
   };
 
+  // Step 2: Sắp xếp lại thứ tự các chunk (kéo thả)
+  const handlePagesReorder = (reordered: StudioPageItem[]) => {
+    setPages(reordered);
+    const updatedMerged = getMergedFromPages(reordered);
+    setMergedText(updatedMerged);
+  };
+
+  // Step 2: Sửa text của từng chunk
+  const handlePageChunkTextChange = (pageId: string, newText: string) => {
+    setPages((prev) => {
+      const next = prev.map((p) => (p.id === pageId ? { ...p, text: newText } : p));
+      const updatedMerged = getMergedFromPages(next);
+      setMergedText(updatedMerged);
+      return next;
+    });
+  };
+
+  // Step 2: Xóa 1 trang từ bước 2
+  const handleDeletePageFromStep2 = (pageId: string) => {
+    setPages((prev) => {
+      const next = prev.filter((p) => p.id !== pageId);
+      const updatedMerged = getMergedFromPages(next);
+      setMergedText(updatedMerged);
+      return next;
+    });
+  };
+
   // Step 2: Clean Text with AI
   const handleCleanWithAi = async (targetLang: string) => {
-    if (!mergedText.trim()) return;
+    const textToClean = mergedText.trim() || getMergedFromPages(pages);
+    if (!textToClean) return;
     setIsCleaning(true);
     try {
-      const res = await cleanText(mergedText, targetLang);
+      const res = await cleanText(textToClean, targetLang);
       setMergedText(res.cleanedText);
       setHasCleaned(true);
       showToast("AI đã chuẩn hóa văn bản và nối liền câu liên trang thành công!");
@@ -325,45 +362,72 @@ export default function OcrStudioPage() {
     }
   };
 
-  // Step 2 -> Step 3: Generate questions with AI, display on BankReviewPanel
-  const handleGenerateQuiz = async () => {
-    if (!mergedText.trim()) return;
-    setIsGenerating(true);
+  // Step 2 -> Step 3: Tự động gọi AI bóc tách toàn bộ câu hỏi từ văn bản và chuyển sang Bước 3
+  const handleProceedToStep3 = async () => {
+    const textToUse = mergedText.trim() || getMergedFromPages(pages);
+    if (!textToUse) {
+      showToast("Vui lòng đảm bảo các trang có nội dung văn bản!");
+      return;
+    }
+    setMergedText(textToUse);
+
+    // Nếu đã bóc tách từ trước và danh sách câu hỏi không rỗng, chuyển thẳng
+    if (bankQuestions.length > 0) {
+      setStep(3);
+      return;
+    }
+
+    setIsExtracting(true);
     try {
-      const res = await generateQuizFromText({
-        topic: category,
-        content: mergedText,
-        numQuestions,
-        difficulty,
-        temperature,
-        saveImmediately: false,
-        authorName: "OCR Studio + AI",
+      const res = await extractQuestionsFromText({
+        text: textToUse,
+        defaultCategory: category || "Chung",
+        defaultDifficulty: difficulty,
       });
 
-      if (res.title) setTitle(res.title);
-
-      // Chuyển sang BankQuestionCreate để hiển thị ở Bước 3
-      const extracted: BankQuestionCreate[] = (res.questions || []).map((q) => ({
-        questionText: q.questionText,
-        questionType: q.questionType || "single_choice",
-        category,
-        difficulty,
-        explanation: q.explanation || "",
-        sourceNote: `OCR Studio – ${pages.length} trang ảnh`,
-        options: (q.options || []).map((opt, idx) => ({
-          optionText: opt.optionText,
-          isCorrect: Boolean(opt.isCorrect),
-          orderNum: idx,
-        })),
-      }));
-
-      setBankQuestions(extracted);
-      setBankSaved(false);
+      if (res.questions && res.questions.length > 0) {
+        setBankQuestions(res.questions);
+        setBankSaved(false);
+        showToast(`AI đã bóc tách thành công ${res.totalExtracted} câu hỏi từ tài liệu!`);
+      } else {
+        showToast("Không tìm thấy câu hỏi trắc nghiệm trong tài liệu. Bạn có thể tự thêm thủ công.");
+      }
       setStep(3);
     } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : "Lỗi khi sinh câu hỏi bằng AI");
+      showToast(err instanceof Error ? err.message : "Lỗi khi bóc tách câu hỏi bằng AI");
+      setStep(3);
     } finally {
-      setIsGenerating(false);
+      setIsExtracting(false);
+    }
+  };
+
+  // Step 3: Quét và bóc tách lại từ văn bản
+  const handleReExtractInStep3 = async () => {
+    const textToUse = mergedText.trim() || getMergedFromPages(pages);
+    if (!textToUse) {
+      showToast("Không tìm thấy văn bản để bóc tách câu hỏi!");
+      return;
+    }
+    setIsExtracting(true);
+    try {
+      const res = await extractQuestionsFromText({
+        text: textToUse,
+        defaultCategory: category || "Chung",
+        defaultDifficulty: difficulty,
+      });
+
+      if (res.questions && res.questions.length > 0) {
+        setBankQuestions(res.questions);
+        setBankSaved(false);
+        showToast(`Đã bóc tách lại thành công ${res.totalExtracted} câu hỏi từ tài liệu!`);
+      } else {
+        setBankQuestions([]);
+        showToast("Không tìm thấy câu hỏi trắc nghiệm nào trong tài liệu.");
+      }
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Lỗi khi bóc tách câu hỏi bằng AI");
+    } finally {
+      setIsExtracting(false);
     }
   };
 
@@ -566,25 +630,16 @@ export default function OcrStudioPage() {
 
         {step === 2 && (
           <MergeCleanPanel
-            mergedText={mergedText}
-            onMergedTextChange={setMergedText}
+            pages={pages}
+            onPagesReorder={handlePagesReorder}
+            onPageTextChange={handlePageChunkTextChange}
+            onDeletePage={handleDeletePageFromStep2}
             onCleanWithAi={handleCleanWithAi}
             isCleaning={isCleaning}
             hasCleaned={hasCleaned}
-            title={title}
-            onTitleChange={setTitle}
-            category={category}
-            onCategoryChange={setCategory}
-            numQuestions={numQuestions}
-            onNumQuestionsChange={setNumQuestions}
-            difficulty={difficulty}
-            onDifficultyChange={setDifficulty}
-            temperature={temperature}
-            onTemperatureChange={setTemperature}
+            isExtracting={isExtracting}
             onBackToStep1={() => setStep(1)}
-            onGenerateQuiz={handleGenerateQuiz}
-            isGenerating={isGenerating}
-            pageCount={pages.length || 1}
+            onProceedToStep3={handleProceedToStep3}
           />
         )}
 
@@ -596,6 +651,9 @@ export default function OcrStudioPage() {
             isSaving={isSavingBank}
             onSaveToBank={handleSaveToBank}
             onBackToStep2={() => setStep(2)}
+            cleanedText={mergedText}
+            onReExtract={handleReExtractInStep3}
+            isExtracting={isExtracting}
           />
         )}
 
