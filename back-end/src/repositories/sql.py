@@ -334,23 +334,44 @@ class SqlAttemptRepository(AttemptRepository):
             stmt = (
                 select(AttemptTable)
                 .where(AttemptTable.id == attempt_id)
-                .options(selectinload(AttemptTable.answers))
+                .options(
+                    selectinload(AttemptTable.answers),
+                    selectinload(AttemptTable.quiz)
+                    .selectinload(QuizTable.questions)
+                    .selectinload(QuestionTable.options),
+                )
             )
             result = await session.execute(stmt)
             attempt = result.scalar_one_or_none()
             if not attempt:
                 return None
 
-            answers_dto = [
-                AttemptAnswerDetail(
-                    id=ans.id,
-                    question_id=ans.question_id,
-                    selected_option_ids=ans.selected_option_ids,
-                    is_correct=ans.is_correct,
-                    earned_points=ans.earned_points,
+            q_map = (
+                {q.id: q for q in attempt.quiz.questions}
+                if attempt.quiz and attempt.quiz.questions
+                else {}
+            )
+
+            answers_dto = []
+            for ans in attempt.answers:
+                q = q_map.get(ans.question_id)
+                correct_ids = (
+                    [opt.id for opt in q.options if opt.is_correct]
+                    if q and q.options
+                    else []
                 )
-                for ans in attempt.answers
-            ]
+                explanation = q.explanation if q else None
+                answers_dto.append(
+                    AttemptAnswerDetail(
+                        id=ans.id,
+                        question_id=ans.question_id,
+                        selected_option_ids=ans.selected_option_ids,
+                        is_correct=ans.is_correct,
+                        earned_points=ans.earned_points,
+                        correct_option_ids=correct_ids,
+                        explanation=explanation,
+                    )
+                )
 
             return AttemptResult(
                 id=attempt.id,
@@ -364,6 +385,7 @@ class SqlAttemptRepository(AttemptRepository):
                 completed_at=attempt.completed_at,
                 answers=answers_dto,
             )
+
 
     async def submit_attempt(
         self,

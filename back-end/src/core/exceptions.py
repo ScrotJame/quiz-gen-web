@@ -95,3 +95,24 @@ def register_exception_handlers(app: FastAPI) -> None:
             content["details"] = exc.details
 
         return JSONResponse(status_code=exc.status_code, content=content)
+
+    @app.exception_handler(Exception)
+    async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+        logger.error(
+            "Lỗi máy chủ không xác định tại %s %s: %s",
+            request.method,
+            request.url.path,
+            exc,
+            exc_info=True,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error_code": "INTERNAL_SERVER_ERROR",
+                "message": "Đã có lỗi xảy ra phía máy chủ. Vui lòng thử lại sau.",
+                "detail": {
+                    "error_code": "INTERNAL_SERVER_ERROR",
+                    "message": "Đã có lỗi xảy ra phía máy chủ. Vui lòng thử lại sau.",
+                },
+            },
+        )

@@ -10,6 +10,7 @@ from sqlalchemy import text
 from src.api.routes import router as api_router
 from src.config import get_settings
 from src.core.exceptions import register_exception_handlers
+from src.core.rate_limit import RateLimitMiddleware
 from src.db.base import Base
 from src.db.session import dispose_engine, get_engine
 
@@ -47,16 +48,23 @@ async def lifespan(app: FastAPI):
 
 
 settings = get_settings()
+is_dev = settings.app_env == "development"
 
 app = FastAPI(
     title=settings.app_name,
     description="Quiz Web Backend với Clean Architecture 3 lớp và Mistral AI Generator",
     version="1.0.0",
+    docs_url="/docs" if is_dev else None,
+    redoc_url=None,
+    openapi_url="/openapi.json" if is_dev else None,
     lifespan=lifespan,
 )
 
 # Đăng ký Exception Seam xử lý lỗi tập trung
 register_exception_handlers(app)
+
+# Giới hạn tần suất request (Rate Limiter)
+app.add_middleware(RateLimitMiddleware)
 
 # Cấu hình CORS cho Next.js frontend
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
@@ -64,7 +72,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins or ["*"],
     allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|.*\.trycloudflare\.com)(:\d+)?"
-    if settings.app_env == "development"
+    if is_dev
     else None,
     allow_credentials=True,
     allow_methods=["*"],
@@ -77,8 +85,10 @@ app.include_router(api_router)
 
 @app.get("/")
 async def root():
-    return {
+    resp = {
         "message": f"Chào mừng tới {settings.app_name}",
-        "docs": "/docs",
         "api": "/api/v1",
     }
+    if is_dev:
+        resp["docs"] = "/docs"
+    return resp

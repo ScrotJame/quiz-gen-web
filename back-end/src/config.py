@@ -47,7 +47,7 @@ class Settings(BaseSettings):
 
     # Gemini AI (Quiz Generation & OCR Engine)
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-3.1-flash-lite"
+    gemini_model: str = "gemini-3.5-flash-lite"
     gemini_ocr_models: str = ""  # Danh sách nhiều model từ biến môi trường GEMINI_OCR_MODELS (ngăn cách bởi dấu phẩy)
     gemini_ocr_model: str = ""   # Fallback tương thích ngược: GEMINI_OCR_MODEL
     gemini_temperature: float = 0.3

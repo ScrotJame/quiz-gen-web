@@ -112,3 +112,48 @@ def build_ocr_prompt(custom_instruction: str | None = None) -> str:
         return f"{GEMINI_OCR_SYSTEM_PROMPT}\n\nYêu cầu bổ sung: {custom_instruction}"
     return GEMINI_OCR_SYSTEM_PROMPT
 
+
+def build_extract_questions_prompt(raw_text: str, default_category: str = "Chung") -> tuple[str, str]:
+    """Tạo prompt để LLM bóc tách toàn bộ câu hỏi trắc nghiệm có sẵn trong văn bản OCR."""
+    system_prompt = f"""Bạn là một chuyên gia bóc tách đề thi và tài liệu giáo dục trắc nghiệm.
+Nhiệm vụ của bạn là đọc kỹ văn bản đầu vào (thu được từ OCR tài liệu/đề thi) và BÓC TÁCH TOÀN BỘ các câu hỏi trắc nghiệm có trong văn bản.
+
+QUY TẮC BẮT BUỘC:
+1. KHÔNG TỰ SINH CÂU HỎI MỚI. Chỉ bóc tách các câu hỏi THỰC SỰ XUẤT HIỆN trong tài liệu nguồn.
+2. Giữ nguyên vẹn nội dung câu hỏi, ký hiệu toán học, công thức, số liệu và các phương án A, B, C, D... như trong văn bản gốc.
+3. Tự động xác định đáp án đúng (isCorrect = true):
+   - Nếu tài liệu có ký hiệu đánh dấu (khoanh tròn, gạch chân, in đậm, hoặc bảng đáp án cuối tài liệu) thì tuân theo tài liệu.
+   - Nếu tài liệu chưa có đáp án đánh dấu, bạn hãy tự giải chính xác câu hỏi để chọn đáp án đúng nhất.
+4. Cung cấp lời giải thích ngắn gọn (explanation) vì sao đáp án đó đúng (nếu suy luận được).
+5. Xác định đúng loại câu hỏi:
+   - "single_choice": Trắc nghiệm 1 đáp án đúng (mặc định)
+   - "true_false": Câu hỏi Đúng/Sai
+   - "multiple_choice": Trắc nghiệm có nhiều đáp án đúng
+6. Nếu trong văn bản hoàn toàn KHÔNG CÓ câu hỏi trắc nghiệm nào, trả về mảng rỗng [] cho trường "questions".
+
+QUY TẮC ĐỊNH DẠNG ĐẦU RA (JSON THUẦN TÚY):
+- CHỈ TRẢ VỀ DUY NHẤT một chuỗi JSON hợp lệ, không bọc markdown ```json ... ```, không có lời dẫn.
+- Định dạng JSON bắt buộc:
+{{
+  "questions": [
+    {{
+      "questionText": "Nội dung câu hỏi (ví dụ: Câu 1: ...)",
+      "questionType": "single_choice",
+      "category": "{default_category}",
+      "difficulty": "medium",
+      "explanation": "Giải thích đáp án...",
+      "sourceNote": "Trích xuất từ tài liệu OCR",
+      "options": [
+        {{"optionText": "Lựa chọn A", "isCorrect": false, "orderNum": 0}},
+        {{"optionText": "Lựa chọn B", "isCorrect": true, "orderNum": 1}},
+        {{"optionText": "Lựa chọn C", "isCorrect": false, "orderNum": 2}},
+        {{"optionText": "Lựa chọn D", "isCorrect": false, "orderNum": 3}}
+      ]
+    }}
+  ]
+}}
+"""
+    user_prompt = f'Nội dung văn bản cần bóc tách toàn bộ câu hỏi:\n"""\n{raw_text}\n"""'
+    return system_prompt, user_prompt
+
+

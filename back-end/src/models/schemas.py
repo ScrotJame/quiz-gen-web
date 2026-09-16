@@ -50,6 +50,7 @@ class OptionCreate(OptionBase):
 class OptionSchema(OptionBase):
     id: uuid.UUID
     question_id: uuid.UUID
+    is_correct: bool | None = None
 
 
 # ---------------------------------------------------------------- questions
@@ -144,6 +145,8 @@ class AttemptAnswerDetail(CamelModel):
     selected_option_ids: list[uuid.UUID]
     is_correct: bool
     earned_points: int
+    correct_option_ids: list[uuid.UUID] = Field(default_factory=list)
+    explanation: str | None = None
 
 
 class AttemptResult(CamelModel):

@@ -8,7 +8,10 @@ import uuid
 from src.core.exceptions import ExternalServiceError
 from src.models.schemas import (
     AIGenerateRequest,
+    BankOptionCreate,
+    BankQuestionCreate,
     Difficulty,
+    ExtractQuestionsResponse,
     GeneratedQuizResponse,
     OptionCreate,
     QuestionCreate,
@@ -21,6 +24,7 @@ from src.services.ai.mistral_client import call_mistral_chat, has_mistral_key
 from src.services.ai.ocr import extract_text_from_image
 from src.services.ai.prompts import (
     build_clean_text_prompt,
+    build_extract_questions_prompt,
     build_system_prompt,
     build_user_prompt,
 )
@@ -60,10 +64,27 @@ class QuizGeneratorService:
         quiz_resp: GeneratedQuizResponse | None = None
         actual_provider = "Mock AI"
 
-        # 1. Ưu tiên sử dụng Mistral AI để sinh câu hỏi
-        if has_mistral_key():
+        # 1. Ưu tiên sử dụng Gemini AI (gemini-3.5-flash-lite)
+        if has_gemini_key():
             try:
-                logger.info("Đang sinh câu hỏi bằng Mistral AI...")
+                logger.info("Đang sinh câu hỏi bằng Gemini AI (gemini-3.5-flash-lite)...")
+                raw_response = await call_gemini_chat(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    temperature=temperature,
+                    model="gemini-3.5-flash-lite",
+                )
+                quiz_resp = self._parse_llm_json(raw_response, default_difficulty=difficulty)
+                actual_provider = "Gemini AI"
+            except Exception as e:
+                logger.warning(
+                    f"Sinh câu hỏi bằng Gemini AI thất bại ({e}), chuyển sang kiểm tra fallback..."
+                )
+
+        # 2. Fallback sang Mistral AI nếu Gemini không có key hoặc gặp lỗi
+        if quiz_resp is None and has_mistral_key():
+            try:
+                logger.info("Đang sinh câu hỏi bằng Mistral AI (fallback)...")
                 raw_response = await call_mistral_chat(
                     system_prompt=system_prompt,
                     user_prompt=user_prompt,
@@ -72,23 +93,7 @@ class QuizGeneratorService:
                 quiz_resp = self._parse_llm_json(raw_response, default_difficulty=difficulty)
                 actual_provider = "Mistral AI"
             except Exception as e:
-                logger.warning(
-                    f"Sinh câu hỏi bằng Mistral AI thất bại ({e}), chuyển sang kiểm tra fallback..."
-                )
-
-        # 2. Fallback sang Gemini AI nếu Mistral không có key hoặc gặp lỗi
-        if quiz_resp is None and has_gemini_key():
-            try:
-                logger.info("Đang sinh câu hỏi bằng Gemini AI (fallback)...")
-                raw_response = await call_gemini_chat(
-                    system_prompt=system_prompt,
-                    user_prompt=user_prompt,
-                    temperature=temperature,
-                )
-                quiz_resp = self._parse_llm_json(raw_response, default_difficulty=difficulty)
-                actual_provider = "Gemini AI"
-            except Exception as e:
-                logger.error(f"Sinh câu hỏi bằng Gemini AI thất bại: {e}")
+                logger.error(f"Sinh câu hỏi bằng Mistral AI thất bại: {e}")
 
         # 3. Fallback sang Mock Generator nếu không có API key hoặc cả hai đều lỗi
         if quiz_resp is None:
@@ -278,14 +283,15 @@ class QuizGeneratorService:
         system_prompt, user_prompt = build_clean_text_prompt(raw_text, target_language)
         raw_response: str | None = None
         try:
-            if has_mistral_key():
-                raw_response = await call_mistral_chat(
+            if has_gemini_key():
+                raw_response = await call_gemini_chat(
                     system_prompt=system_prompt,
                     user_prompt=user_prompt,
                     temperature=0.2,
+                    model="gemini-3.5-flash-lite",
                 )
-            elif has_gemini_key():
-                raw_response = await call_gemini_chat(
+            elif has_mistral_key():
+                raw_response = await call_mistral_chat(
                     system_prompt=system_prompt,
                     user_prompt=user_prompt,
                     temperature=0.2,
@@ -306,3 +312,194 @@ class QuizGeneratorService:
         except Exception:
             logger.warning("Không parse được JSON từ AI clean-text, dùng raw_text fallback.")
             return raw_text
+
+    def _parse_extracted_questions_json(
+        self,
+        raw_json: str,
+        default_category: str = "Chung",
+        default_difficulty: str = "medium",
+    ) -> list[BankQuestionCreate]:
+        """Chuyển đổi chuỗi JSON từ LLM thành danh sách BankQuestionCreate."""
+        cleaned = raw_json.strip()
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+
+        data = json.loads(cleaned)
+        if isinstance(data, list):
+            raw_qs = data
+        elif isinstance(data, dict):
+            raw_qs = data.get("questions", [])
+        else:
+            raw_qs = []
+        result: list[BankQuestionCreate] = []
+
+        for q in raw_qs:
+            opts: list[BankOptionCreate] = []
+            for idx, opt in enumerate(q.get("options", [])):
+                opts.append(
+                    BankOptionCreate(
+                        option_text=opt.get("optionText", f"Lựa chọn {idx + 1}"),
+                        is_correct=bool(opt.get("isCorrect", False)),
+                        order_num=int(opt.get("orderNum", idx)),
+                    )
+                )
+            if opts and not any(o.is_correct for o in opts):
+                opts[0].is_correct = True
+
+            q_type_str = q.get("questionType", "single_choice")
+            try:
+                q_type = QuestionType(q_type_str)
+            except ValueError:
+                q_type = QuestionType.SINGLE_CHOICE
+
+            result.append(
+                BankQuestionCreate(
+                    question_text=q.get("questionText", "Nội dung câu hỏi"),
+                    question_type=q_type,
+                    category=q.get("category") or default_category,
+                    difficulty=q.get("difficulty") or default_difficulty,
+                    explanation=q.get("explanation"),
+                    source_note=q.get("sourceNote", "Bóc tách từ tài liệu OCR"),
+                    options=opts,
+                )
+            )
+        return result
+
+    def _extract_questions_fallback(
+        self,
+        text: str,
+        default_category: str = "Chung",
+        default_difficulty: str = "medium",
+    ) -> list[BankQuestionCreate]:
+        """Fallback trích xuất câu hỏi bằng regex khi không có AI LLM."""
+        pattern = r"(?=(?:^|\n)\s*(?:[Cc][âa]u|[Bb]ài|[Bb]ai|[Qq]uestion)\s*\d+[:.]|\b(?:[Cc][âa]u|[Bb]ài|[Bb]ai|[Qq]uestion)\s*\d+[:.])"
+        parts = re.split(pattern, text, flags=re.IGNORECASE)
+        questions: list[BankQuestionCreate] = []
+
+        for part in parts:
+            chunk = part.strip()
+            if not chunk:
+                continue
+
+            match_header = re.match(
+                r"^(?:(?:[Cc][âa]u|[Bb]ài|[Bb]ai|[Qq]uestion)\s*\d+[:.]|\d+[:.])\s*(.+)",
+                chunk,
+                flags=re.DOTALL | re.IGNORECASE,
+            )
+            if not match_header:
+                continue
+
+            opt_pattern = r"(?:^|\n)\s*([A-D])[\.:\)]\s*(.+?)(?=(?:(?:^|\n)\s*[A-D][\.:\)])|\Z)"
+            opt_matches = list(re.finditer(opt_pattern, chunk, flags=re.DOTALL | re.IGNORECASE))
+
+            if len(opt_matches) >= 2:
+                first_opt_start = opt_matches[0].start()
+                q_text = chunk[:first_opt_start].strip()
+
+                options: list[BankOptionCreate] = []
+                for idx, opt_m in enumerate(opt_matches):
+                    opt_letter = opt_m.group(1).upper()
+                    opt_content = opt_m.group(2).strip()
+                    is_correct = bool(re.search(r"(\[\s*[xX*]\s*\]|\*|\(đúng\))", opt_content))
+                    opt_cleaned = re.sub(r"(\[\s*[xX*]\s*\]|\*|\(đúng\))", "", opt_content).strip()
+                    opt_text = (
+                        f"{opt_letter}. {opt_cleaned}"
+                        if not opt_cleaned.startswith(f"{opt_letter}.")
+                        else opt_cleaned
+                    )
+                    options.append(
+                        BankOptionCreate(
+                            option_text=opt_text,
+                            is_correct=is_correct,
+                            order_num=idx,
+                        )
+                    )
+
+                if not any(o.is_correct for o in options) and options:
+                    options[0].is_correct = True
+
+                questions.append(
+                    BankQuestionCreate(
+                        question_text=q_text,
+                        question_type=QuestionType.SINGLE_CHOICE,
+                        category=default_category,
+                        difficulty=default_difficulty,
+                        explanation="Trích xuất từ cấu trúc đề thi văn bản.",
+                        source_note="Bóc tách từ tài liệu OCR",
+                        options=options,
+                    )
+                )
+
+        return questions
+
+    async def extract_questions(
+        self,
+        raw_text: str,
+        default_category: str = "Chung",
+        default_difficulty: str = "medium",
+    ) -> ExtractQuestionsResponse:
+        """Bóc tách toàn bộ câu hỏi trắc nghiệm có sẵn trong văn bản OCR bằng LLM (hoặc regex fallback)."""
+        if not raw_text.strip():
+            return ExtractQuestionsResponse(questions=[], total_extracted=0)
+
+        questions: list[BankQuestionCreate] | None = None
+
+        if has_gemini_key() or has_mistral_key():
+            system_prompt, user_prompt = build_extract_questions_prompt(
+                raw_text, default_category=default_category
+            )
+            raw_response: str | None = None
+            # 1. Ưu tiên Gemini AI (gemini-3.5-flash-lite)
+            if has_gemini_key():
+                try:
+                    logger.info("Đang bóc tách câu hỏi bằng Gemini AI (gemini-3.5-flash-lite)...")
+                    raw_response = await call_gemini_chat(
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
+                        temperature=0.0,
+                        model="gemini-3.5-flash-lite",
+                    )
+                    if raw_response:
+                        questions = self._parse_extracted_questions_json(
+                            raw_response,
+                            default_category=default_category,
+                            default_difficulty=default_difficulty,
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"Bóc tách câu hỏi bằng Gemini AI gặp lỗi ({e}), chuyển sang kiểm tra fallback..."
+                    )
+
+            # 2. Fallback sang Mistral AI nếu Gemini không thành công
+            if questions is None and has_mistral_key():
+                try:
+                    logger.info("Đang bóc tách câu hỏi bằng Mistral AI (fallback)...")
+                    raw_response = await call_mistral_chat(
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
+                        temperature=0.0,
+                    )
+                    if raw_response:
+                        questions = self._parse_extracted_questions_json(
+                            raw_response,
+                            default_category=default_category,
+                            default_difficulty=default_difficulty,
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"Bóc tách câu hỏi bằng Mistral AI gặp lỗi ({e}), chuyển sang regex fallback."
+                    )
+
+        if questions is None:
+            logger.info("Dùng fallback regex để bóc tách câu hỏi từ văn bản.")
+            questions = self._extract_questions_fallback(
+                raw_text,
+                default_category=default_category,
+                default_difficulty=default_difficulty,
+            )
+
+        return ExtractQuestionsResponse(
+            questions=questions,
+            total_extracted=len(questions),
+        )
+

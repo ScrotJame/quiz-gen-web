@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import logging
 from typing import Annotated
 
@@ -12,10 +13,12 @@ from fastapi import (
     UploadFile,
     status,
 )
+from PIL import Image
 
 from src.api.deps import get_quiz_generator_service
 from src.config import get_settings
 from src.core.exceptions import (
+    AppError,
     GenerationFailedError,
     NoTextFoundError,
     RateLimitExceededError,
@@ -25,6 +28,8 @@ from src.models.schemas import (
     CleanTextRequest,
     CleanTextResponse,
     Difficulty,
+    ExtractQuestionsRequest,
+    ExtractQuestionsResponse,
     GeneratedQuizResponse,
     OcrPageResponse,
 )
@@ -36,19 +41,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ai", tags=["AI Quiz Generator"])
 
 _ALLOWED_IMAGE_TYPES = frozenset(
-    ["image/jpeg", "image/png", "image/webp", "image/jpg", "application/octet-stream"]
+    ["image/jpeg", "image/png", "image/webp", "image/jpg"]
 )
+_MAX_PIXELS = 50_000_000  # Giới hạn 50 Megapixels chống Decompression Bomb
+
+
+def _check_magic_bytes(data: bytes) -> bool:
+    """Xác thực định dạng file qua magic bytes (PNG, JPEG, WebP)."""
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return True
+    if data.startswith(b"\xff\xd8\xff"):
+        return True
+    if data.startswith(b"RIFF") and len(data) >= 12 and data[8:12] == b"WEBP":
+        return True
+    return False
 
 
 def validate_image_file(file: UploadFile, image_bytes: bytes, max_size_mb: int = 10) -> None:
-    """Kiểm tra định dạng và kích thước của file ảnh tải lên."""
-    content_type = (file.content_type or "").lower()
-    if content_type and content_type not in _ALLOWED_IMAGE_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Định dạng file không hỗ trợ: {file.content_type}. Chỉ chấp nhận PNG/JPG/WEBP.",
-        )
-
+    """Kiểm tra định dạng, magic bytes và kích thước/độ phân giải của file ảnh tải lên."""
     if not image_bytes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -60,6 +70,37 @@ def validate_image_file(file: UploadFile, image_bytes: bytes, max_size_mb: int =
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"File vượt quá kích thước cho phép ({max_size_mb} MB).",
+        )
+
+    content_type = (file.content_type or "").lower()
+    if content_type and content_type not in _ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Định dạng file không hỗ trợ: {file.content_type}. Chỉ chấp nhận PNG/JPG/WEBP.",
+        )
+
+    if not _check_magic_bytes(image_bytes):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tệp tải lên không phải là ảnh hợp lệ (chữ ký tệp không khớp PNG/JPEG/WEBP).",
+        )
+
+    # Chống Image Decompression Bomb / Pixel Flood DoS
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as img:
+            width, height = img.size
+            if width * height > _MAX_PIXELS:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Độ phân giải ảnh quá lớn ({width}x{height} pixels). Giới hạn tối đa là 50 Megapixels.",
+                )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning("Không thể giải mã header ảnh: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Không thể đọc dữ liệu ảnh. Tệp có thể đã bị hỏng.",
         )
 
 
@@ -80,7 +121,8 @@ async def generate_quiz_from_text(
             author_name=data.author_name,
         )
     except Exception as e:
-        raise GenerationFailedError(f"Lỗi khi sinh đề bằng AI: {e}")
+        logger.error("Lỗi khi sinh đề bằng AI: %s", e, exc_info=True)
+        raise GenerationFailedError("Không thể sinh đề thi bằng AI. Vui lòng kiểm tra lại yêu cầu hoặc thử lại sau.")
 
 
 @router.post("/generate-from-image", response_model=GeneratedQuizResponse)
@@ -113,7 +155,8 @@ async def generate_quiz_from_image(
             preferred_engine=engine,
         )
     except Exception as e:
-        raise GenerationFailedError(f"Lỗi khi xử lý OCR và sinh đề từ ảnh: {e}")
+        logger.error("Lỗi khi xử lý OCR và sinh đề từ ảnh: %s", e, exc_info=True)
+        raise GenerationFailedError("Không thể xử lý OCR và sinh đề từ ảnh. Vui lòng kiểm tra lại chất lượng ảnh.")
 
 
 @router.post("/ocr-page", response_model=OcrPageResponse)
@@ -152,6 +195,7 @@ async def ocr_single_page(
             det_params=det_params or None,
         )
     except Exception as e:
+        logger.error("Lỗi khi xử lý OCR: %s", e, exc_info=True)
         err_str = str(e)
         if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
             raise RateLimitExceededError(
@@ -159,7 +203,7 @@ async def ocr_single_page(
             )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Lỗi khi xử lý OCR: {e}",
+            detail="Lỗi khi xử lý OCR. Vui lòng thử lại sau hoặc đổi sang engine khác.",
         )
 
     if not result.text.strip():
@@ -176,8 +220,42 @@ async def clean_text(
     service: Annotated[QuizGeneratorService, Depends(get_quiz_generator_service)],
 ) -> CleanTextResponse:
     """Làm sạch văn bản OCR thô bằng AI (sửa dấu tiếng Việt, nối câu liên trang)."""
-    cleaned_text = await service.clean_text(
-        raw_text=data.raw_text,
-        target_language=data.target_language,
-    )
-    return CleanTextResponse(cleaned_text=cleaned_text)
+    try:
+        cleaned_text = await service.clean_text(
+            raw_text=data.raw_text,
+            target_language=data.target_language,
+        )
+        return CleanTextResponse(cleaned_text=cleaned_text)
+    except AppError:
+        raise
+    except Exception as e:
+        logger.error("Lỗi khi làm sạch văn bản bằng AI: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Không thể làm sạch văn bản bằng AI. Vui lòng thử lại sau.",
+        )
+
+
+@router.post("/extract-questions", response_model=ExtractQuestionsResponse)
+async def extract_questions_from_text(
+    data: ExtractQuestionsRequest,
+    service: Annotated[QuizGeneratorService, Depends(get_quiz_generator_service)],
+) -> ExtractQuestionsResponse:
+    """Bóc tách toàn bộ câu hỏi trắc nghiệm có sẵn trong văn bản đã OCR và chuẩn hóa."""
+    try:
+        return await service.extract_questions(
+            raw_text=data.text,
+            default_category=data.default_category,
+            default_difficulty=data.default_difficulty,
+        )
+    except AppError:
+        raise
+    except Exception as e:
+        logger.error("Lỗi khi bóc tách câu hỏi từ văn bản: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Không thể bóc tách câu hỏi từ văn bản. Vui lòng kiểm tra lại nội dung.",
+        )
+
+
+

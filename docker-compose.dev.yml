@@ -26,7 +26,7 @@ services:
       APP_PORT: "8000"
       APP_HOST: "0.0.0.0"
       LOG_LEVEL: "DEBUG"
-      DATABASE_URL: "${DATABASE_URL:-postgresql+asyncpg://postgres:Cuongbghg21%40@host.docker.internal:5432/web_quiz}"
+      DATABASE_URL: "${DATABASE_URL:?DATABASE_URL is required in .env}"
       DB_ECHO: "true"
       CORS_ORIGINS: "http://localhost:3000,http://127.0.0.1:3000"
       GEMINI_API_KEY: "${GEMINI_API_KEY:-}"

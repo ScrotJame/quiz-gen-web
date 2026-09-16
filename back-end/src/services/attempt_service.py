@@ -104,6 +104,8 @@ class AttemptService:
                     selected_option_ids=selected_ids,
                     is_correct=is_correct,
                     earned_points=earned_points,
+                    correct_option_ids=correct_option_ids,
+                    explanation=q.explanation,
                 )
             )
 

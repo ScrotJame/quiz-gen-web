@@ -5,6 +5,7 @@ import uuid
 from src.core.exceptions import AppError, EntityNotFoundError
 from src.models.schemas import (
     DashboardStats,
+    OptionSchema,
     QuestionCreate,
     QuestionSchema,
     QuestionType,
@@ -56,11 +57,36 @@ class QuizService:
     async def get_dashboard_stats(self) -> DashboardStats:
         return await self.repo.get_dashboard_stats()
 
-    async def get_quiz(self, quiz_id: uuid.UUID) -> QuizDetail:
+    async def get_quiz(self, quiz_id: uuid.UUID, *, mask_answers: bool = True) -> QuizDetail:
         quiz = await self.repo.get_quiz(quiz_id)
         if not quiz:
             raise QuizNotFoundError(f"Không tìm thấy đề thi với mã: {quiz_id}")
-        return quiz
+
+        if not mask_answers:
+            return quiz
+
+        # Bảo mật: Ẩn is_correct và explanation khi lấy đề thi để chống gian lận qua F12 Network tab
+        sanitized_questions = []
+        for q in quiz.questions:
+            sanitized_options = [
+                OptionSchema(
+                    id=opt.id,
+                    question_id=opt.question_id,
+                    option_text=opt.option_text,
+                    order_num=opt.order_num,
+                    is_correct=None,
+                )
+                for opt in q.options
+            ]
+            sanitized_q = q.model_copy(
+                update={
+                    "options": sanitized_options,
+                    "explanation": None,
+                }
+            )
+            sanitized_questions.append(sanitized_q)
+
+        return quiz.model_copy(update={"questions": sanitized_questions})
 
     async def create_quiz(self, data: QuizCreate) -> QuizDetail:
         # Validate business rules
